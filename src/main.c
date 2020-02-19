@@ -1133,7 +1133,7 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 {
     if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
     {
-        uint8_t cmd_txt[26];
+        /* uint8_t cmd_txt[26];
         strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);			//собираем текст команды
         if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
         {
@@ -1148,8 +1148,8 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
             strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].pgm_par_2);//добавляем текст команды из флэш
         }
         strcat_P ((char*)cmd_txt, (PGM_P) CRLF);	//собираем текст команды и записываем в задачу
-
-        /* string_to_TX_Ring (WR_CMD[cmd_task_T].cmd));
+        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика */
+        string_to_TX_Ring (WR_CMD[cmd_task_T].cmd);
         if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
         {
             arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
@@ -1162,9 +1162,7 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
         }
-        string_to_TX_Ring (CRLF); */
-
-        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика
+        string_to_TX_Ring (CRLF);
         ans_lim = 180;								//установка времени ожидания ответа
         UCSR0B |= (1<<UDRIE0);						//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;								//запускаем таймер ответа
@@ -1193,7 +1191,7 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 
 uint8_t send_sms (void)	//HANDLER отправки смс
 {
-    uint8_t cmd[26];				// временный массив текста команды
+    /* uint8_t cmd[26];				// временный массив текста команды */
     uint8_t name[N_NAME];			// временный массив имени устройства
     static uint8_t k = 0;			// переменная номера устройства, static для циклов отправки длинных смс частями
     static uint8_t n = 0;			// переменная количества устройств, static для циклов отправки длинных смс частями
@@ -1203,15 +1201,15 @@ uint8_t send_sms (void)	//HANDLER отправки смс
 
     if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
     {
-        strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
+        /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
         strcat ((char*)cmd, (char*)phones.phone_0);
         strcat_P ((char*)cmd, (PGM_P) QUOTES);
         strcat_P ((char*)cmd, (PGM_P) CRLF);
-        arr_to_TX_Ring (cmd);
-        /* string_to_TX_Ring (AT_CMGS);
+        arr_to_TX_Ring (cmd); */
+        string_to_TX_Ring (AT_CMGS);
         arr_to_TX_Ring (phones.phone_0);
         string_to_TX_Ring (QUOTES);
-        string_to_TX_Ring (CRLF); */
+        string_to_TX_Ring (CRLF);
         ans_lim = 180;									// таймер ожидания ответа 3с
         UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
@@ -1407,16 +1405,16 @@ uint8_t send_sms (void)	//HANDLER отправки смс
 
 uint8_t read_sms (void)	//HANDLER чтения смс
 {
-    uint8_t cmd[16];														//массив текста команды
+    /* uint8_t cmd[16]; */														//массив текста команды
     if (!RD_SMS[inc_task_T].step.flag_1 && !RD_SMS[inc_task_T].step.flag_2) //если первый вход в задачу
     {
-        strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
+        /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
         strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
         strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-        arr_to_TX_Ring (cmd);
-        /* string_to_TX_Ring (AT_CMGR);
+        arr_to_TX_Ring (cmd); */
+        string_to_TX_Ring (AT_CMGR);
         arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
-        string_to_TX_Ring (CRLF); */
+        string_to_TX_Ring (CRLF);
         ans_lim = 120;						//таймер ответа 2с
         UCSR0B |= (1<<UDRIE0);				//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;						//запускаем таймер ожидания ответа "/r/nOK/r/n"
@@ -1427,13 +1425,13 @@ uint8_t read_sms (void)	//HANDLER чтения смс
     {
         if (mod_ans == OK)	//если в msg есть "/r/nOK/r/n"
         {
-            strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
+            /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
             strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
             strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-            arr_to_TX_Ring (cmd);
-            /* string_to_TX_Ring (AT_CMGD);
+            arr_to_TX_Ring (cmd); */
+            string_to_TX_Ring (AT_CMGD);
             arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
-            string_to_TX_Ring (CRLF); */
+            string_to_TX_Ring (CRLF);
             ans_lim = 120;							//таймер ожидания ответа 2с
             UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
             ans_cnt = 0;							//запускаем таймер ответа
