@@ -1138,13 +1138,13 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 
 uint8_t send_sms (void)	//HANDLER отправки смс
 {
-    uint8_t cmd[26];		// временный массив текста команды
-    uint8_t name[N_NAME];	// временный массив имени устройства
-    uint8_t k = 0;			// переменная номера устройства
-    uint8_t n = 0;			// переменная количества устройств
-    uint8_t sms_type = 0;	// переменная для типа смс
-    int8_t t = 0;			// переменная температуры из массива измерений
-    uint8_t digits[N_DIGS];	// временный массив цифр температур
+    uint8_t cmd[26];				// временный массив текста команды
+    uint8_t name[N_NAME];			// временный массив имени устройства
+    static uint8_t k = 0;			// переменная номера устройства, static для циклов отправки длинных смс частями
+    static uint8_t n = 0;			// переменная количества устройств, static для циклов отправки длинных смс частями
+    static uint8_t sms_type = 0;	// переменная для типа смс, static для циклов отправки длинных смс частями
+    int8_t t = 0;					// переменная температуры из массива измерений
+    uint8_t digits[N_DIGS];			// временный массив цифр температур
 
     if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
     {
@@ -1153,29 +1153,33 @@ uint8_t send_sms (void)	//HANDLER отправки смс
         strcat_P ((char*)cmd, (PGM_P) QUOTES);
         strcat_P ((char*)cmd, (PGM_P) CRLF);
         arr_to_TX_Ring (cmd);
-        ans_lim = 180;							//таймер ожидания ответа 3с
-        UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
-        ans_cnt = 0;							//запускаем таймер ожидания ответа ">"
-        WR_SMS[out_task_T].step.flag_1 = 1;		//запрос на передачу смс отправлен
+        ans_lim = 180;									// таймер ожидания ответа 3с
+        UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
+        ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
+        WR_SMS[out_task_T].step.flag_1 = 1;				// запрос на передачу смс отправлен
+        sms_type = WR_SMS[out_task_T].sms_txt.sms_type;	// считываем тип смс для дальнейшего выполнения
+        if (sms_type == ALL)
+        {
+            n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств для длинной смс
+        }
         return 'A';
     }
-    else if (WR_SMS[out_task_T].step.flag_1)	//если запрос на передачу смс был отправлен в модем
+    else if (WR_SMS[out_task_T].step.flag_1)			// если запрос на передачу смс был отправлен в модем
     {
         if (mod_ans == INVITE)	//если в msg есть ">"
         {
-            sms_type = WR_SMS[out_task_T].sms_txt.sms_type;
             switch (sms_type)
             {
                 case FAIL:
                     k = WR_SMS[out_task_T].sms_txt.dev_num;					// копируем номер устройства
                     eeprom_read_block (name, &ee_arr[k].name, sizeof name);	// читаем имя устройства во временный массив
-                    arr_to_TX_Ring (name);			// шлём в кольцо имя
-                    string_to_TX_Ring (blank);		// шлём в кольцо пробел
-                    string_to_TX_Ring (crash);		// шлём в кольцо АВАРИЯ!
+                    arr_to_TX_Ring (name);									// шлём в кольцо имя
+                    string_to_TX_Ring (blank);								// шлём в кольцо пробел
+                    string_to_TX_Ring (crash);								// шлём в кольцо АВАРИЯ!
                     break;
                 case ALL:
-                    n = eeprom_read_byte((uint8_t*)dev_qty);
-                    for (k = 0; k < n; k++)
+                    if (UCSR0B & (1<<UDRIE0)) {return 0;}						// ждём пока не сбросится флаг после предыдущего разрешения прерывания
+                    while (k < n)												// отправляем все значения last_t в TX_Ring
                     {
                         eeprom_read_block (name, &ee_arr[k].name, sizeof name);	// читаем имя устройства во временный массив
                         arr_to_TX_Ring (name);									// шлём в кольцо имя
@@ -1185,14 +1189,15 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                         arr_to_TX_Ring(utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits)); // шлём в кольцо цифры темп-ры
                         string_to_TX_Ring (CRLF);								// шлём в кольцо символы CRLF
                         UCSR0B |= (1<<UDRIE0);									// разрешение прерывания по опустошению UDR передатчика
-                        while (UCSR0B & (1<<UDRIE0)){;}							// ждём пока не сбросится флаг
+                        k++;
+                        return 0;
                     }
                     break;
-                case TEST1:
-                    string_to_TX_Ring (quick);
-                    break;
-                case TEST2:
-                    string_to_TX_Ring (slow);
+                    /* case TEST1:
+                        string_to_TX_Ring (quick);
+                        break;
+                    case TEST2:
+                        string_to_TX_Ring (slow); */
                 default:							// если ни один случай не отработал
                     string_to_TX_Ring (sms_send);	// пока шлём текст SMS АВАРИЯ!
                     string_to_TX_Ring (crash);
@@ -1205,6 +1210,7 @@ uint8_t send_sms (void)	//HANDLER отправки смс
             WR_SMS[out_task_T].step.flag_1 = 0;		// сброс флага "запрос на передачу смс отправлен в модем"
             WR_SMS[out_task_T].step.flag_2 = 1;		// подъём флага "тескт смс отправлен в модем"
             mod_ans = 0;							// обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            k = 0;									// обнуляем индекс устройства для выполнения следующей задачи
             return 'B';
         }
 #ifdef DEBUG
