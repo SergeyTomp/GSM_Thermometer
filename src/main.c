@@ -57,7 +57,7 @@
 #define MYUBRR			103					// скорость usart 9600
 #define RX_RING_SIZE	128					// размер буфера берём 128, ответ модема с текстом вх.смс больше 64 байт, а нужно обеспечить размер равный степени 2
 #define RX_IND_MSK		(RX_RING_SIZE - 1)	// маска индексов кольцевого буфера приёмника для обнуления индекса при переходе  RX_Index через 0
-#define TX_RING_SIZE	32					// размер буфера берём 32, максимальная длина посылки в модем 25 байт, но нужно обеспечить размер равный степени 2
+#define TX_RING_SIZE	64					// размер буфера берём 64, максимальная длина посылки в модем 36 байт, но нужно обеспечить размер равный степени 2
 #define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
 
 //блок define для работы с модемом
@@ -65,7 +65,7 @@
 #define QUEUE_SIZE			16					// размер кольца очереди обработчиков
 #define INC_TASK_SIZE		8 					// размер кольца задач на чтение смс
 #define OUT_TASK_SIZE		4					// размер кольца задач на отправку смс
-#define CMD_TASK_SIZE		4					// размер кольца задач на отправку команд
+#define CMD_TASK_SIZE		8					// размер кольца задач на отправку команд
 #define QUEUE_IND_MSK		(QUEUE_SIZE - 1)	// маска кольца очереди обработчиков
 #define INC_TASK_IND_MSK	(INC_TASK_SIZE - 1)	// маска кольца задач на чтение смс
 #define OUT_TASK_IND_MSK	(OUT_TASK_SIZE - 1)	// маска кольца задач на отправку смс
@@ -73,7 +73,7 @@
 #define PWR_UP_ANS_TIMER	900					// таймер получения ответа модема при включении
 #define PAUSE_CNT_MAX		60					// максимальная пауза после приёма очередного байта по RX перед XOFF (PAUSE_CNT_MAX/60)c
 #define MSG_SIZE			(RX_RING_SIZE + 1)	// размер массива для выгрузки из кольца приёмника; +1б к Rx-кольцу т.к. в конце всегда нужен 0 даже при выгрузке 128б
-#define TODO_MAX			20					// размер массива для текста команды контроллеру, должен быть меньше RX_RING_SIZE
+#define TODO_MAX			25					// размер массива для текста команды контроллеру, должен быть меньше RX_RING_SIZE
 #define RST_PORT			PORTB				// Порт, к одному из выводов которого подключен вывод сброса модема(здесь порт один с OW line)
 #define DDR_RST_PORT		DDRB				// Регистр направления данных порта, к одному из выводов которого подключен вывод сброса модема(здесь порт один с OW line)
 #define RST_PIN_NUM			2 					// Номер вывода, к которому подключен вывод сброса модема, для макроса _BV()
@@ -133,7 +133,12 @@ unsigned char cmd_ring_ovf[]	PROGMEM = "Ком.буф.полный!";	// сообщение на lcd пр
 unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";		// сообщение на lcd при переполнении магазина задач
 unsigned char gsm_scale[]		PROGMEM = {0,3,6,10,13,16,19,23,26,29,32,35,39,42,45,48,52,55,58,61,65,68,71,74,77,81,84,87,90,94,97,100};//уровни сигнала
 unsigned char gsm[]				PROGMEM = "GSM";				// часть строки в сообщении про уровень сигнала
-
+unsigned char BEELINE[]			PROGMEM = "Bee";				// Билайн
+unsigned char MTS[]				PROGMEM = "MTS";				// МТС
+unsigned char MEGAFON[]			PROGMEM = "Meg";				// Мегафон
+unsigned char TELE2[]			PROGMEM = "Tel";				// Теле2
+unsigned char USERS[]			PROGMEM = "USERS";				// начало смс со списком телефонов пользователей
+unsigned char DELETE[]			PROGMEM = "DELETE";				// начало смс об удалении пользователей
 
 //блок текстовых строк во флэш для работы с модемом
 unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
@@ -155,9 +160,20 @@ unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
 unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
 unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
 unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
-unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,\"";	// USSD запрос баланса
+unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,\"";	// USSD запрос баланса с открывающими кавычками номера телефона
 //unsigned char TEXT_100[]		PROGMEM = "#100#\"";		// номер баланса, пока здесь
 unsigned char ANS_CUSD[]		PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
+unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
+unsigned char ANS_COPS[]		PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
+unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
+unsigned char ANS_CPBF[]		PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
+unsigned char USER_0[]			PROGMEM = "\"user_0\"";		// имя админа с открывающими и закрывающими кавычками
+unsigned char USER_1[]			PROGMEM = "\"user_1\"";		// имя пользователя с открывающими и закрывающими кавычками
+unsigned char BALANS[]			PROGMEM = "\"balans\"";		// текст balans с открывающими и закрывающими кавычками
+unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=,\"";	// запрос на запись в сим в свободную ячейку с открывающими кавычками номера телефона
+unsigned char TEXT_145[]		PROGMEM = "\",145,";		// часть запроса на запись телефона в сим с закрывающими кавычками номера
+unsigned char TEXT_129[]		PROGMEM = "\",129,";		// часть запроса на запись кода баланса с закрывающими кавычками кода
+
 
 // блок глобальных переменных и структур
 typedef struct //битовое поле для флагов
@@ -277,6 +293,7 @@ struct tel_list							// структура массивов телефонов пользователей и USSD-запро
     uint8_t balance [7];				// для USSD-запроса баланса
     uint8_t phone_0 [13];				// администратор
     uint8_t phone_1 [13];				// обычный пользователь без прав изменений
+    uint8_t reserv [4];					// резервный для временной записи кода баланса в 12-ти значном виде
 };
 
 sms_mask sms_buff;						// буфер для текста смс
@@ -292,9 +309,13 @@ uint8_t todo_txt [TODO_MAX];			// массив для выгрузки текста команды контроллеру
 uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа модема на запросы ( "ОК", ">" и пр.)
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
 /* варианты значений для шаблонов смс */
-enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR, SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, TEST1, TEST2};
+enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
+    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, USER, MEMBERS, TEST1, TEST2};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
-struct tel_list phones = {{'#','1','0','0','#','\"','\0',}, {'+','7','9','0','5','2','1','3','5','6','7','8','\0'}, {0,0,0,0,0,0,0,0,0,0,0,0}};	// заносим телефоны, пока так
+struct tel_list phones = {	{'#','0','0','0','#','\"','\0',},
+                              {'+','0','0','0','0','0','0','0','0','0','0','0','\0'},
+                              {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
+                              {'0','0','0','\0'}};	// структура с телефонами
 unsigned char gsm_sig;					// грязное значение уровня сигнала из ответа модема на запрос (0...31->0...100)
 
 //	блок переменных и массивов для работы с USART
@@ -1133,7 +1154,7 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 {
     if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
     {
-        /* uint8_t cmd_txt[26];
+        uint8_t cmd_txt[50];
         strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);			//собираем текст команды
         if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
         {
@@ -1141,28 +1162,14 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
         }
         if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
         {
-            strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].pgm_par_1);//добавляем текст команды из флэш
+            strcat_P ((char*)cmd_txt, (PGM_P)WR_CMD[cmd_task_T].pgm_par_1);	//добавляем текст команды из флэш
         }
         if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
         {
-            strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].pgm_par_2);//добавляем текст команды из флэш
+            strcat_P ((char*)cmd_txt, (PGM_P)WR_CMD[cmd_task_T].pgm_par_2);	//добавляем текст команды из флэш
         }
         strcat_P ((char*)cmd_txt, (PGM_P) CRLF);	//собираем текст команды и записываем в задачу
-        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика */
-        string_to_TX_Ring (WR_CMD[cmd_task_T].cmd);
-        if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
-        {
-            arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
-        }
-        if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
-        {
-            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_1);				//добавляем текст команды из флэш
-        }
-        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
-        {
-            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
-        }
-        string_to_TX_Ring (CRLF);
+        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика
         ans_lim = 180;								//установка времени ожидания ответа
         UCSR0B |= (1<<UDRIE0);						//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;								//запускаем таймер ответа
@@ -1191,7 +1198,7 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 
 uint8_t send_sms (void)	//HANDLER отправки смс
 {
-    /* uint8_t cmd[26];				// временный массив текста команды */
+    uint8_t cmd[26];				// временный массив текста команды
     uint8_t name[N_NAME];			// временный массив имени устройства
     static uint8_t k = 0;			// переменная номера устройства, static для циклов отправки длинных смс частями
     static uint8_t n = 0;			// переменная количества устройств, static для циклов отправки длинных смс частями
@@ -1201,25 +1208,30 @@ uint8_t send_sms (void)	//HANDLER отправки смс
 
     if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
     {
-        /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
-        strcat ((char*)cmd, (char*)phones.phone_0);
-        strcat_P ((char*)cmd, (PGM_P) QUOTES);
-        strcat_P ((char*)cmd, (PGM_P) CRLF);
-        arr_to_TX_Ring (cmd); */
-        string_to_TX_Ring (AT_CMGS);
-        arr_to_TX_Ring (phones.phone_0);
-        string_to_TX_Ring (QUOTES);
-        string_to_TX_Ring (CRLF);
-        ans_lim = 180;									// таймер ожидания ответа 3с
-        UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
-        ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
-        WR_SMS[out_task_T].step.flag_1 = 1;				// запрос на передачу смс отправлен
-        sms_type = WR_SMS[out_task_T].sms_txt.sms_type;	// считываем тип смс для дальнейшего выполнения
-        if (sms_type == ALL)
+        if ((phones.phone_0[0] = '+')&&(phones.phone_0[1] = '7')&&(phones.phone_0[2] = '9'))//проверяем наличие телефона админа в массиве (+79...)
         {
-            n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств для длинной смс
+            strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);			// собираем команду
+            strcat ((char*)cmd, (char*)phones.phone_0);		// собираем команду
+            strcat_P ((char*)cmd, (PGM_P) QUOTES);			// собираем команду
+            strcat_P ((char*)cmd, (PGM_P) CRLF);			// собираем команду
+            arr_to_TX_Ring (cmd);							// отправляем команду в кольцо
+            ans_lim = 180;									// таймер ожидания ответа 3с
+            UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
+            ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
+            WR_SMS[out_task_T].step.flag_1 = 1;				// запрос на передачу смс отправлен
+            sms_type = WR_SMS[out_task_T].sms_txt.sms_type;	// считываем тип смс для дальнейшего выполнения
+            if (sms_type == ALL)
+            {
+                n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств для длинной смс
+            }
+            return 'A';
         }
-        return 'A';
+        else
+        {
+            out_task_T = (out_task_T + 1) & OUT_TASK_IND_MSK;	// удаляем отменённую задачу из списка задач на отправку смс
+            queue_T = (queue_T + 1) & QUEUE_IND_MSK;			// удаляем отменённую задачу из очереди
+            return 'W';
+        }
     }
     else if (WR_SMS[out_task_T].step.flag_1)			// если запрос на передачу смс был отправлен в модем
     {
@@ -1340,10 +1352,58 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                     arr_to_TX_Ring (WR_SMS[out_task_T].sms_txt.ptr);			// отправляем цифры баланса
                     break;
 
+                case BAL_TEL:
+                    string_to_TX_Ring (BALANCE);
+                    break;
+
                 case COM_ERR:
                     string_to_TX_Ring (com_error);
                     break;
 
+                case ADMIN:
+                    string_to_TX_Ring (USER_0);
+                    string_to_TX_Ring (NEW_LN);
+                    arr_to_TX_Ring (phones.phone_0);
+                    break;
+
+                case USER:
+                    string_to_TX_Ring (USER_1);
+                    string_to_TX_Ring (NEW_LN);
+                    arr_to_TX_Ring (phones.phone_1);
+                    break;
+
+                case MEMBERS:								// отправка по схеме длинной смс
+                    if (UCSR0B & (1<<UDRIE0)) {return 0;}	// ждём пока не сбросится флаг после предыдущего разрешения прерывания
+                    switch (k)								// здесь "к" - счётчик строк, чтобы не вводить ещё одну static переменную
+                    {
+                        case 0:
+                            string_to_TX_Ring (USER_0);
+                            string_to_TX_Ring (NEW_LN);
+                            arr_to_TX_Ring (phones.phone_0);
+                            string_to_TX_Ring (NEW_LN);
+                            k = 1;
+                            UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
+                            return 0;
+                        case 1:
+                            string_to_TX_Ring (USER_1);
+                            string_to_TX_Ring (NEW_LN);
+                            arr_to_TX_Ring (phones.phone_1);
+                            string_to_TX_Ring (NEW_LN);
+                            k = 2;
+                            UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
+                            return 0;
+                        case 2:
+                            string_to_TX_Ring (BALANS);
+                            string_to_TX_Ring (NEW_LN);
+                            arr_to_TX_Ring (phones.balance);
+                            string_to_TX_Ring (NEW_LN);
+                            k = 3;
+                            UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
+                            return 0;
+                        case 3:
+                            break;
+                    }
+                    break;
                     /* case TEST1:
                         string_to_TX_Ring (quick);
                         break;
@@ -1405,16 +1465,13 @@ uint8_t send_sms (void)	//HANDLER отправки смс
 
 uint8_t read_sms (void)	//HANDLER чтения смс
 {
-    /* uint8_t cmd[16]; */														//массив текста команды
+    uint8_t cmd[16];														//массив текста команды
     if (!RD_SMS[inc_task_T].step.flag_1 && !RD_SMS[inc_task_T].step.flag_2) //если первый вход в задачу
     {
-        /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
+        strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
         strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
         strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-        arr_to_TX_Ring (cmd); */
-        string_to_TX_Ring (AT_CMGR);
-        arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
-        string_to_TX_Ring (CRLF);
+        arr_to_TX_Ring (cmd);
         ans_lim = 120;						//таймер ответа 2с
         UCSR0B |= (1<<UDRIE0);				//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;						//запускаем таймер ожидания ответа "/r/nOK/r/n"
@@ -1425,13 +1482,10 @@ uint8_t read_sms (void)	//HANDLER чтения смс
     {
         if (mod_ans == OK)	//если в msg есть "/r/nOK/r/n"
         {
-            /* strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
+            strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
             strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
             strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-            arr_to_TX_Ring (cmd); */
-            string_to_TX_Ring (AT_CMGD);
-            arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
-            string_to_TX_Ring (CRLF);
+            arr_to_TX_Ring (cmd);
             ans_lim = 120;							//таймер ожидания ответа 2с
             UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
             ans_cnt = 0;							//запускаем таймер ответа
@@ -1483,62 +1537,54 @@ uint8_t parser(void) // разбор текста msg
     uint8_t n = 0;			// число найденных +cmti:, их может быть несколько
     uint8_t  number[3];		// временный массив для порядкового номера смс
     uint8_t pars_res = 'Z';	// результат работы парсера
-    static uint8_t money[6];// массив для цифр баланса, static, чтобы можно было передать на него указатель в sms_buff
+    static uint8_t money[6];// массив для цифр баланса, static, чтобы можно было передать на него указатель
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 		// если в msg есть r/n/OKr/n:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 			// если в msg есть r/n/OKr/n:
     {
         mod_ans = OK;
         pars_res = 'O';
     }
-    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)	// если в msg есть r/n>:
+    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)		// если в msg есть r/n>:
     {
         mod_ans = INVITE;
         pars_res = 'I';
     }
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)		// если в msg есть r/n/+cmgr:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)			// если в msg есть r/n/+cmgr:
     {
-        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)			// если телефон правильный
+        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)				// если телефон правильный
         {
-            txt_ptr += 8;													// смещаем указатель за +CMGR:_
-            uint8_t q = 0;													// счётчик кавычек
-            while ((q != 8)&&(*txt_ptr != '\r'))// ищем последние закрывающие (восьмые) кавычки, за ними будет текст смс
-            {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
-                if (*txt_ptr == '\"')										// если наткнулись на кавычки
-                {q += 1;}												// растим счётчик
-                txt_ptr += 1;												// указатель двигаем в любом случае
-            }
-            if (q == 8)														// только если насчитали 8 кавычек, иначе нафиг эту смс
-            {
-                txt_ptr += 2;
-                for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
-                uint8_t j = 0;
-                while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
-                {
-                    todo_txt[j] = *(txt_ptr + j);
-                    j++;
-                }
-                to_do(); 													// вызываем функцию распознавания команды
-            }
-            /* for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		// очистка массива задания контроллеру
+            for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		 	// очистка массива задания контроллеру
             uint8_t j = 0;
-            while (((*(txt_ptr + 64 + j)) != '\r') && (j < TODO_MAX))		// копируем текст команды контроллеру из смс
+            while (((*(txt_ptr + 70 + j)) != '\r') && (j < TODO_MAX))			// копируем текст команды контроллеру из смс (если на сим нет номера отправителя, смещение 64, не 70!!!)
             {
-                todo_txt[j] = *(txt_ptr + 64 + j);
+                todo_txt[j] = *(txt_ptr + 70 + j);
                 j++;
             }
-            to_do(); 														// вызываем функцию распознавания команды */
+            to_do(); 		// вызываем функцию распознавания команды
             pars_res = 'R';
+        }
+            // если телефон админа (из массива) не найден в ответе модема, но в массиве телефон user_0 не записан, принимаем номер из смс за user_0, записываем в массив и на сим
+        else if ((phones.phone_0[0] != '+')&&(phones.phone_0[1] != '7')&&(phones.phone_0[2] != '9'))//достаточно проверки первых трёх символов
+        {
+            for (uint8_t i = 0; i < 12; i++)
+            {
+                phones.phone_0[i] = txt_ptr[25 + i];
+            }
+            cmd_to_queue (AT_CPBW, phones.phone_0, TEXT_145, USER_0);	//записываем этот телефон на сим
+            sms_buff.sms_type = ADMIN;									// отправляем подтверждение отправителю
+            out_to_queue (&sms_buff);
         }
     }
 
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CSQ))!= NULL) // если в строке есть r/n/+csq:_
     {
-        uint8_t tmp[3];						// временный массив приёма символов цифр уровня сигнала
+        txt_ptr = txt_ptr + 8;							// ставим указатель на первую цифру
+        uint8_t tmp[3];									// временный массив приёма символов цифр уровня сигнала
         uint8_t j = 0;
-        while (isdigit(*(txt_ptr + 8 + j)))	// переносим цифровые символы после r/n/+csq:_ в массив
+        while (isdigit(*(txt_ptr + j)))					// переносим цифровые символы после r/n/+csq:_ в массив
         {
-            tmp[j] = *(txt_ptr + 8 + j);
+            tmp[j] = *(txt_ptr + j);
             j++;
         }
         uint8_t lev = atoi_fast (tmp);					// переводим символы в число == уровню сигнала
@@ -1555,7 +1601,7 @@ uint8_t parser(void) // разбор текста msg
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CUSD))!= NULL) 	// если в строке есть \r\n+CUSD:_
     {
         txt_ptr = txt_ptr + 11;
-        while (!((isdigit(*txt_ptr))||(*txt_ptr == '-')))					// ищем цифровые символы или '-' после "r/n/+CUSD:_0,"
+        while (!((isdigit(*txt_ptr))||(*txt_ptr == '-')))// ищем цифровые символы или '-' после "r/n/+CUSD:_0,"
         {
             txt_ptr++;
         }
@@ -1569,6 +1615,66 @@ uint8_t parser(void) // разбор текста msg
         sms_buff.sms_type = MONEY;
         sms_buff.ptr = money;
         out_to_queue (&sms_buff);
+    }
+
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_COPS))!= NULL) 	// если в строке есть "\r\n+COPS: "
+    {
+        txt_ptr = txt_ptr + 14;
+        if (strstr_P(txt_ptr, (PGM_P) MTS) != NULL)				// если МТС
+        {
+            phones.balance[1] = '1';							// остальные и так 0
+        }
+        else if (strstr_P(txt_ptr, (PGM_P) BEELINE)	!= NULL)	// если Билайн
+        {
+            phones.balance[1] = '1';
+            phones.balance[3] = '2';							// в середине и так 0
+        }
+        else if (strstr_P(txt_ptr, (PGM_P) MEGAFON)	!= NULL)	// если Мегафон
+        {
+            phones.balance[0] = '1';							// остальные и так 0
+        }
+        else if (strstr_P(txt_ptr, (PGM_P) TELE2)	!= NULL)	// если Теле2
+        {
+            phones.balance[1] = '1';
+            phones.balance[3] = '5';							// в середине и так 0
+        }
+        else if ((phones.balance[1] == '0')&&(phones.balance[2] == '0')&&(phones.balance[3] == '0'))//если в массиве нули
+        {
+            sms_buff.sms_type = BAL_TEL;						// запрашиваем админа прислать код баланса
+            sms_buff.dev_num = 0;
+            sms_buff.param = 0;
+            sms_buff.ptr = NULL;
+            out_to_queue(&sms_buff);
+        }
+    }
+
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CPBF))!= NULL) 	// если в строке ответа есть "\r\n+CPBF: "
+    {
+        txt_ptr = txt_ptr + 12;												// ставим указатель на первый знак телефона в строке ответа
+        if ((strstr_P((const char*)txt_ptr, (PGM_P) USER_0)) != NULL)		// если в тексте ответа модема user_0, копируем телефон в массив админа
+        {
+            for (uint8_t i = 0; i < 12; i++)
+            {
+                phones.phone_0[i] = *(txt_ptr + i);
+            }
+            cmd_to_queue (AT_CPBF, NULL, NULL, USER_1);						// запрос поиска номера рядового пользователя
+        }
+        else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_1)) != NULL)	// если в тексте ответа модема user_1, копируем телефон в массив пользователя
+        {
+            for (uint8_t i = 0; i < 12; i++)
+            {
+                phones.phone_1[i] = *(txt_ptr + i);
+            }
+        }
+        else if	((strstr_P((const char*)txt_ptr, (PGM_P) BALANS)) != NULL)	// если в тексте ответа модема есть balans
+        {
+            phones.reserv[0] = *txt_ptr;									// переносим сначала во временный массив
+            phones.reserv[1] = *(txt_ptr + 1);
+            phones.reserv[2] = *(txt_ptr + 2);
+            phones.balance[1] = phones.reserv[0];							// копируем в рабочий массив
+            phones.balance[2] = phones.reserv[1];
+            phones.balance[3] = phones.reserv[2];
+        }
     }
 
     do	//ищем все r/n/+cmti:_
@@ -1685,6 +1791,8 @@ void to_do (void)			// модуль разбора и выполнения команды
     uint8_t chng_done = 0; 								// признак успешного изменения команды на изменение
     uint8_t digits[N_DIGS];								// временный массив цифр температур
     uint8_t n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств
+    char* txt_ptr = NULL;								// указатель на начало искомого текста в строке todo_txt
+
     if (todo_txt[0]=='r' && todo_txt[1]=='e' && todo_txt[2]=='q' && todo_txt[3]=='u' && todo_txt[4]=='e' && todo_txt[5]=='s' && todo_txt [6] == 't')
     {
         // out_to_queue ((uint8_t*)(PSTR("answer")));
@@ -1862,10 +1970,112 @@ void to_do (void)			// модуль разбора и выполнения команды
         }
         out_to_queue (&sms_buff);
     }
-    else if (strstr_P((const char*)todo_txt, (PGM_P) BALANCE) != NULL)//если в todo_txt есть BALANCE
+
+    else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_0)) != NULL)//если в todo_txt есть user_0
     {
-        cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);
+        uint8_t i = 0;
+        uint8_t j = 0;
+        while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
+        {
+            i++;
+        }
+        if (todo_txt [i] == '+')
+        {
+            phones.phone_0[0] = todo_txt [i];			// записываем + первым символом в массив телефона админа
+            j += 1;
+            i += 1;
+            while (isdigit(todo_txt [i])&&(j < 12)) 	// переписываем цифры после + в массив телефона админа
+            {
+                phones.phone_0[j] = todo_txt [i];
+                i++;
+                j++;
+            }
+            if (j == 12)								// если записан + и 12 цифр
+            {
+                cmd_to_queue (AT_CPBW, phones.phone_0, TEXT_145, USER_0);		// записываем этот телефон на сим
+                sms_buff.sms_type = ADMIN;										// отправляем подтверждение админу
+                out_to_queue (&sms_buff);
+            }
+
+        }
     }
+
+    else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_1)) != NULL)//если в todo_txt есть user_1
+    {
+        uint8_t i = 0;
+        uint8_t j = 0;
+        while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
+        {
+            i++;
+        }
+        if (todo_txt [i] == '+')
+        {
+            phones.phone_1[0] = todo_txt [i];								// записываем + первым символом в массив телефона админа
+            j += 1;
+            i += 1;
+            while (isdigit(todo_txt [i])&&(j < 12)) 						// переписываем цифры после + в массив телефона админа
+            {
+                phones.phone_1[j] = todo_txt [i];
+                i++;
+                j++;
+            }
+            if (j == 12)													// если записан + и 12 цифр
+            {
+                cmd_to_queue (AT_CPBW, phones.phone_1, TEXT_145, USER_1);	//записываем этот телефон на сим
+                sms_buff.sms_type = USER;									// отправляем подтверждение админу
+                out_to_queue (&sms_buff);
+            }
+        }
+    }
+
+    else if (strstr_P((const char*)todo_txt, (PGM_P) USERS) != NULL)		//если в todo_txt есть USERS
+    {
+        sms_buff.sms_type = MEMBERS;										// отправляем список пользователя
+        out_to_queue (&sms_buff);
+    }
+
+    else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) BALANCE)) != NULL)	//если в todo_txt есть BALANCE
+    {
+        txt_ptr = txt_ptr + 8;											// ставим указатель после BALANCE и пробела
+        if ((*txt_ptr == '*')||(*txt_ptr == '#')||(isdigit(*txt_ptr)))  // если после BALANCE и пробела есть *,# или цифра
+        {
+            if (!isdigit(*txt_ptr))										// если после BALANCE и пробела не цифра
+            {
+                txt_ptr +=1;											// сдвигаем ещё на 1
+            }
+            uint8_t i = 0;
+            while ((isdigit(txt_ptr[i]))&&(i < 3))
+            {
+                phones.balance[i + 1] = txt_ptr[i];                     // записываем три цифры в рабочий массив телефона баланса
+                phones.reserv [i] = txt_ptr[i];                         // записываем три цифры в массив условного телефона баланса для записи на сим
+                i++;
+            }
+            if (i == 3)													// если получилось три цифры, всё ок
+            {
+                cmd_to_queue (AT_CPBW, phones.reserv, TEXT_129, BALANS);// отправляем в сим условный номер баланса
+                cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);     // запрос баланса в качестве проверки правильности цифр от админа
+            }
+            else														// если не получилось три цифры, неверная команда
+            {
+                sms_buff.sms_type = COM_ERR;
+                out_to_queue (&sms_buff);
+            }
+        }
+        else															// если после BALANCE и пробела не *, не # и не цифра
+        {
+            cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);         // значит просто команда на запрос баланса
+        }
+    }
+
+    else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)	// если в todo_txt есть DELETE
+    {
+        if (strstr((const char*)todo_txt, (char*)phones.phone_1))					// если номер из смс номер есть в массиве
+        {
+            for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
+            {phones.phone_1[i] = '0';}
+        }
+    }
+
     else
     {
         sms_buff.sms_type = COM_ERR;
@@ -2452,13 +2662,14 @@ int main (void)
 
     USART_Init(MYUBRR);							//включаем UART
     TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;// Сбросить к/буферы приёмника и передатчика
-    msg_clr();									//очистка msg
+    msg_clr();									// очистка msg
     ans_cnt = 0;								// запуск таймера ожидания ответа модема после включения/сброса
-    //cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);		// добавляем в стартовый список команд "удалить все смс"
-    cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);
+    cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);// добавляем в стартовый список команд "удалить все смс"
+    cmd_to_queue (AT_CPBF, NULL, USER_0, NULL);	// добавляем в стартовый список команд запрос поиска номера админа
+    cmd_to_queue (AT_CPBF, NULL, BALANS, NULL);	// добавляем в стартовый список команд запрос поиска номера баланса
+    cmd_to_queue (AT_COPS, NULL, NULL, NULL);	// добавляем в стартовый список команд запрос оператора для определения кода баланса
+
     sei();										// глобально разрешаем прерывания
-
-
 
     if (!(SRC_PIN & src_msk))					// если на пине 0, т.е кнопка нажата, делаем полный поиск устройств на шине и перезапись найденного в епром
     {
@@ -2846,7 +3057,7 @@ int main (void)
             {
                 handl_res = HANDLERS[queue_T]();
 #ifdef DEBUG
-                lcd_dat_XY(handl_res, 8, 1); //вывод на lcd результатов из обработчиков
+                lcd_dat_XY(handl_res, 8, 1); 			//вывод на lcd результатов из обработчиков
 #endif
             }
 
@@ -2857,28 +3068,28 @@ int main (void)
                 time_gsm = 0;							//запускаем таймер запросов уровня gsm в прерывании
             }
 
-            switch (press_time) 						// блок детектирования нажатия кнопки и задач по длительности жима
-            {
-                case QUICK :
-                {
-                    sms_buff.sms_type = ALL;
-                    out_to_queue (&sms_buff);			//отправляем перечень температур в смс
-                    lcd_clr(); 							//очистка дисплея
-                    send_string_to_LCD_XY(quick, 0, 0); //отправляем текст QUICK на lcd
-                    press_time = 0;
-                    break;
-                }
-                case SLOW : // сейчас не работает
-                {
-                    //out_to_queue (slow);	//отправляем текст SLOW
-                    lcd_clr();				// очистка дисплея
-                    send_string_to_LCD_XY (slow, 0, 0);
-                    press_time = 0;
-                    break;
-                }
-                case 0 :
-                    break;
-            }
+/* 			switch (press_time) 					// блок детектирования нажатия кнопки и задач по длительности жима
+			{
+				case QUICK :
+				{
+					sms_buff.sms_type = ALL;
+					out_to_queue (&sms_buff);			//отправляем перечень температур в смс
+					lcd_clr(); 							//очистка дисплея
+					send_string_to_LCD_XY(quick, 0, 0); //отправляем текст QUICK на lcd
+					press_time = 0;
+					break;
+				}
+				case SLOW : // сейчас не работает
+				{
+					//out_to_queue (slow);	//отправляем текст SLOW
+					lcd_clr();				// очистка дисплея
+					send_string_to_LCD_XY (slow, 0, 0);
+					press_time = 0;
+					break;
+				}
+				case 0 :
+					break;
+			} */
         }
     }	//конец бесконечного цикла
 }	//конец функции main
