@@ -61,7 +61,7 @@
 #define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
 
 //блок define для работы с модемом
-//#define SMS_SIZE			25					// ограничение длины исходящих смс
+//#define SMS_SIZE			25					// ограничение длины исходящих смс, не используется более
 #define QUEUE_SIZE			16					// размер кольца очереди обработчиков
 #define INC_TASK_SIZE		8 					// размер кольца задач на чтение смс
 #define OUT_TASK_SIZE		4					// размер кольца задач на отправку смс
@@ -104,31 +104,33 @@ unsigned char done[] 			PROGMEM = "Замена выполнена";	// сообщение в add_ID посл
 unsigned char no_new[] 			PROGMEM = "Новых устр-в нет";	// сообщение в add_ID если прошли весь цикл поиска ноовых ID
 unsigned char delete[] 			PROGMEM = "Удалить?";			// сообщение - первый пункт меню Корректировка
 unsigned char del_done[] 		PROGMEM = "Удалено";			// сообщение по факту удаления устройства
-unsigned char t_error[] 		PROGMEM = "Неверная темп-ра";	// сообщение при попытке записать некорректную температуру в датчик
-unsigned char com_error[] 		PROGMEM = "Неверная команда";	// сообщение при ошибке в тексте команды
+unsigned char t_error[] 		PROGMEM = "Wrong temp.limit";	// сообщение при попытке записать некорректную температуру в датчик
+unsigned char com_error[] 		PROGMEM = "Incorrect command";	// сообщение при ошибке в тексте команды
 unsigned char frame_err[]		PROGMEM = "Ошибка приёма!"; 	// сообщение при ошибке приёма байта по Rx
-unsigned char name_error_ren[] 	PROGMEM = "Неверное имя REN";	// сообщение при ошибкочном имени в тексте команды
-unsigned char name_error_al[] 	PROGMEM = "Неверное имя AL";	// сообщение при ошибкочном имени в тексте команды
-unsigned char name_error_sms[] 	PROGMEM = "Неверное имя SMS";	// сообщение при ошибкочном имени в тексте команды
+unsigned char name_error_ren[] 	PROGMEM = "REN-Incorrect name";	// сообщение при ошибочном имени в тексте команды REN...
+unsigned char name_error_al[] 	PROGMEM = "AL-Incorrect name";	// сообщение при ошибочном имени в тексте команды AL...
+unsigned char name_error_sms[] 	PROGMEM = "SMS-Incorrect name";	// сообщение при ошибочном имени в тексте команды SMS...
+unsigned char name_error[] 		PROGMEM = "Incorrect name";		// сообщение при ошибочном имени в тексте команды
+unsigned char rename_ok[] 		PROGMEM = "Rename done";		// сообщение при успешном изменении имени
 unsigned char t_min[] 			PROGMEM = "Tmin";				// часть строки при подтверждении изменения минимального порогоа температуры
 unsigned char t_max[] 			PROGMEM = "Tmax";				// часть строки при подтверждении изменения максимального порога температуры
 unsigned char t_low[] 			PROGMEM = "T<";					// часть строки при сообщениии о снижении температуры ниже минимального порога
 unsigned char t_high[] 			PROGMEM = "T>";					// часть строки при сообщениии о повышении температуры выше максимального порога
 unsigned char sms_send []		PROGMEM = "SMS";				// часть строки при подтверждении включения sms о выходе температуры за пределы
-unsigned char on []				PROGMEM = "ВКЛ.";
-unsigned char off []			PROGMEM = "ОТК.";
-unsigned char blank []			PROGMEM = " ";
-unsigned char crash []			PROGMEM = "FAIL!";
-unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";
-unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";
-unsigned char quick[]			PROGMEM = "QUICK";
-unsigned char slow[]			PROGMEM = "SLOW";
-unsigned char sim900[]			PROGMEM = "SIM900 ";
-unsigned char not_rdy[]			PROGMEM = "не готов";
-unsigned char out_ring_ovf[]	PROGMEM = "Исх.буф.полный!";
-unsigned char inc_ring_ovf[]	PROGMEM = "Вх.буф.полный!";
-unsigned char cmd_ring_ovf[]	PROGMEM = "Ком.буф.полный!";
-unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";
+unsigned char on []				PROGMEM = "ON";					// часть строки при подтверждении включения sms о выходе температуры за пределы
+unsigned char off []			PROGMEM = "OFF";				// часть строки при подтверждении включения sms о выходе температуры за пределы
+unsigned char blank []			PROGMEM = " ";					// пробел, где нужно
+unsigned char crash []			PROGMEM = "FAIL!";				// часть строки при сообщении об аварии на линии
+unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";	// сообщение на lcd при переполнении TX_ring
+unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";	// сообщение на lcd при переполнении RX_ring
+unsigned char quick[]			PROGMEM = "QUICK";				// тестовое сообщение
+unsigned char slow[]			PROGMEM = "SLOW";				// тестовое сообщение
+/* unsigned char sim900[]			PROGMEM = "SIM900 ";			// тестовое сообщение, использовалось при отладке СИМ900 */
+/* unsigned char not_rdy[]			PROGMEM = "не готов";			// тестовое сообщение, использовалось при отладке СИМ900 */
+unsigned char out_ring_ovf[]	PROGMEM = "Исх.буф.полный!";	// сообщение на lcd при переполнении очереди задач на отправку
+unsigned char inc_ring_ovf[]	PROGMEM = "Вх.буф.полный!";		// сообщение на lcd при переполнении очереди задач на приём/чтение
+unsigned char cmd_ring_ovf[]	PROGMEM = "Ком.буф.полный!";	// сообщение на lcd при переполнении очереди команд
+unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";		// сообщение на lcd при переполнении магазина задач
 
 //блок текстовых строк во флэш для работы с модемом
 unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
@@ -237,7 +239,7 @@ typedef struct	//структура содержимого смс
 {
     uint8_t sms_type;					// вариант шаблона смс (обязательный параметр)
     uint8_t dev_num;					// номер устройства (заполняется при необходимости)
-    int8_t param;						// параметр, пока только температура из массива результатов измерений (заполняется при необходимости)
+    int8_t param;						// параметр, пока только температура из массива результатов измерений или пороговая из устройства(заполняется при необходимости)
 }sms_mask;
 
 typedef struct 	//структура задачи приёма смс, 4 байта
@@ -271,7 +273,8 @@ uint8_t msg[MSG_SIZE]; 					// массив для выгрузки из кольцевого буфера     	###
 uint8_t todo_txt [TODO_MAX];			// массив для выгрузки текста команды контроллеру	#############
 uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа модема на запросы ( "ОК", ">" и пр.)
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
-enum {FAIL, ALARM, DONE, ALL, TEST1, TEST2};			// варианты значений для типов смс
+/* варианты значений для шаблонов смс */
+enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR, SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, TEST1, TEST2};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
 
 //	блок переменных и массивов для работы с USART
@@ -1175,8 +1178,9 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                     eeprom_read_block (name, &ee_arr[k].name, sizeof name);	// читаем имя устройства во временный массив
                     arr_to_TX_Ring (name);									// шлём в кольцо имя
                     string_to_TX_Ring (blank);								// шлём в кольцо пробел
-                    string_to_TX_Ring (crash);								// шлём в кольцо АВАРИЯ!
+                    string_to_TX_Ring (crash);								// шлём в кольцо FAIL!
                     break;
+
                 case ALL:
                     if (UCSR0B & (1<<UDRIE0)) {return 0;}						// ждём пока не сбросится флаг после предыдущего разрешения прерывания
                     while (k < n)												// отправляем все значения last_t в TX_Ring
@@ -1193,13 +1197,97 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                         return 0;
                     }
                     break;
+
+                case REN_DONE:
+                    string_to_TX_Ring (rename_ok);
+                    break;
+
+                case NAME_ERR:
+                    string_to_TX_Ring (name_error);
+                    break;
+
+                case MIN_LIM_SET:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    t = WR_SMS[out_task_T].sms_txt.param;						// копируем значение температуры из задачи
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (t_min);
+                    string_to_TX_Ring (blank);
+                    byte_to_TX_Ring ((t & 0b10000000) ? '-' : '+');
+                    arr_to_TX_Ring (utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits));
+                    break;
+
+                case MAX_LIM_SET:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    t = WR_SMS[out_task_T].sms_txt.param;						// копируем значение температуры из задачи
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (t_max);
+                    string_to_TX_Ring (blank);
+                    byte_to_TX_Ring ((t & 0b10000000) ? '-' : '+');
+                    arr_to_TX_Ring (utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits));
+                    break;
+
+                case LIM_ERR:
+                    string_to_TX_Ring (t_error);
+                    break;
+
+                case SMS_ON:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (sms_send);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (on);
+                    break;
+
+                case SMS_OFF:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (sms_send);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (off);
+                    break;
+
+                case T_LOW:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    t = WR_SMS[out_task_T].sms_txt.param;						// копируем значение температуры из задачи
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (t_low);
+                    byte_to_TX_Ring (((t & 0b10000000) ? '-' : '+'));
+                    arr_to_TX_Ring (utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits));
+                    break;
+
+                case T_HIGH:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;						// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);		// читаем имя устройства во временный массив
+                    t = WR_SMS[out_task_T].sms_txt.param;						// копируем значение температуры из задачи
+                    arr_to_TX_Ring (name);
+                    string_to_TX_Ring (blank);
+                    string_to_TX_Ring (t_high);
+                    byte_to_TX_Ring (((t & 0b10000000) ? '-' : '+'));
+                    arr_to_TX_Ring (utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits));
+                    break;
+
+                case COM_ERR:
+                    string_to_TX_Ring (com_error);
+                    break;
+
                     /* case TEST1:
                         string_to_TX_Ring (quick);
                         break;
                     case TEST2:
                         string_to_TX_Ring (slow); */
+
                 default:							// если ни один случай не отработал
-                    string_to_TX_Ring (sms_send);	// пока шлём текст SMS АВАРИЯ!
+                    string_to_TX_Ring (sms_send);	// пока шлём текст "SMS FAIL!"
                     string_to_TX_Ring (crash);
                     break;
             }
@@ -1476,25 +1564,189 @@ void cmd_to_queue (uint8_t *cmd, uint8_t *par)	//постановка в очередь задачи отп
     }
 }
 
-void to_do (void) //тестовый модуль разбора и выполнения команды
+void to_do (void)			// модуль разбора и выполнения команды
 {
+    uint8_t chng_done = 0; 								// признак успешного изменения команды на изменение
+    uint8_t digits[N_DIGS];								// временный массив цифр температур
+    uint8_t n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств
     if (todo_txt[0]=='r' && todo_txt[1]=='e' && todo_txt[2]=='q' && todo_txt[3]=='u' && todo_txt[4]=='e' && todo_txt[5]=='s' && todo_txt [6] == 't')
     {
         // out_to_queue ((uint8_t*)(PSTR("answer")));
         sms_buff.sms_type = TEST2;
-        out_to_queue (&sms_buff);
     }
     else if (todo_txt[0]=='T' && todo_txt[1]==' ' && todo_txt[2]=='A' && todo_txt[3]=='L' && todo_txt[4]=='L')
     {
         sms_buff.sms_type = ALL;
-        out_to_queue (&sms_buff);
+    }
+    else if ((todo_txt[0]=='R')&&(todo_txt[1]=='E')&&(todo_txt[2]=='N')&&(todo_txt[3]==' '))
+    {
+        for (uint8_t i = 0; i < n; i++)
+        {
+            eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+            if (!strncmp((void*)buffer.name, (void*)&todo_txt[4], sizeof(buffer.name)-1))
+            {
+                location = &todo_txt[12];
+                strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
+                cli();
+                eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
+                sei();
+                chng_done = 1;
+                sms_buff.sms_type = REN_DONE;
+            }
+        }
+        if (!chng_done)
+        {
+            lcd_clr();
+            send_string_to_LCD_XY (name_error_ren, 0, 0);
+            sms_buff.sms_type = NAME_ERR;
+        }
+    }
+    else if ((todo_txt[0]=='T')&&((todo_txt[1]=='L')||(todo_txt[1]=='H'))&&(todo_txt[2]=='A')&&(todo_txt[3]=='L')&&(todo_txt[4]==' ')&&(todo_txt[4 + N_NAME]==' ')&&((todo_txt[5 + N_NAME]=='-')||(todo_txt[5 + N_NAME]=='+')))
+    {
+        int8_t t_lim = atoi_fast (&todo_txt[5 + N_NAME]);
+        if ((t_lim >= -127) && (t_lim <= 127))
+        {
+            for (uint8_t i = 0; i < n; i++)
+            {
+                eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                if (!strncmp((void*)buffer.name, (void*)&todo_txt[5], sizeof(buffer.name)-1))
+                {
+                    if (todo_txt[1]=='L')
+                    {
+                        buffer.tmin = t_lim;
+                        cli();
+                        eeprom_update_block (&buffer.tmin, &ee_arr[i].tmin, sizeof buffer.tmin);
+                        sei();
+                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                        send_string_to_LCD (blank);
+                        send_string_to_LCD (t_min);
+                        send_string_to_LCD (blank);
+                        lcd_dat ((buffer.tmin & 0b10000000) ? '-' : '+');
+                        send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
+                        chng_done = 1;
+                        sms_buff.sms_type = MIN_LIM_SET;
+                        sms_buff.param = buffer.tmin;
+                    }
+                    else if (todo_txt[1]=='H')
+                    {
+                        buffer.tmax = t_lim;
+                        cli();
+                        eeprom_update_block (&buffer.tmax, &ee_arr[i].tmax, sizeof buffer.tmax);
+                        sei();
+                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                        send_string_to_LCD (blank);
+                        send_string_to_LCD (t_max);
+                        send_string_to_LCD (blank);
+                        lcd_dat ((buffer.tmax & 0b10000000) ? '-' : '+');
+                        send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
+                        chng_done = 1;
+                        sms_buff.sms_type = MAX_LIM_SET;
+                        sms_buff.param = buffer.tmax;
+                    }
+                    sms_buff.dev_num = i;
+                }
+            }
+            if (!chng_done)
+            {
+                sms_buff.sms_type = NAME_ERR;
+                send_string_to_LCD_XY (name_error_al, 0, 0);
+            }
+        }
+        else
+        {
+            send_string_to_LCD_XY (t_error, 0, 0);
+            sms_buff.sms_type = LIM_ERR;
+        }
+    }
+    else if ((todo_txt[0]=='S')&&(todo_txt[1]=='M')&&(todo_txt[2]=='S')&&(todo_txt[3]==' ')&&(todo_txt[4]=='T')&&((todo_txt[5]=='L')||(todo_txt[5]=='H'))&&((todo_txt[6]=='1')||(todo_txt[6]=='0'))&&(todo_txt[7]==' '))
+    {
+        for (uint8_t i = 0; i < n; i++)
+        {
+            eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+            eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));
+            if (!strncmp((void*)buffer.name, (void*)&todo_txt[8], sizeof(buffer.name)-1))
+            {
+                if ((todo_txt[5]=='L')&&(todo_txt[6]=='1'))
+                {
+                    buffer.flags.sms_T = 1;
+                    cli();
+                    eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
+                    sei();
+                    send_arr_to_LCD_XY(buffer.name, 0, 0);
+                    send_string_to_LCD_XY (t_low, 0, 1);
+                    send_string_to_LCD(t_min);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (sms_send);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (on);
+                    chng_done = 1;
+                    sms_buff.sms_type = SMS_ON;
+                }
+                else if ((todo_txt[5]=='H')&&(todo_txt[6]=='1'))
+                {
+                    buffer.flags.sms_T = 1;
+                    cli();
+                    eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
+                    sei();
+                    lcd_clr();
+                    send_arr_to_LCD_XY(buffer.name, 0, 0);
+                    send_string_to_LCD_XY (t_high, 0, 1);
+                    send_string_to_LCD (t_max);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (sms_send);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (on);
+                    chng_done = 1;
+                    sms_buff.sms_type = SMS_ON;
+                }
+                else if ((todo_txt[5]=='L')&&(todo_txt[6]=='0'))
+                {
+                    buffer.flags.sms_T = 0;
+                    cli();
+                    eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
+                    sei();
+                    lcd_clr();
+                    send_arr_to_LCD_XY(buffer.name, 0, 0);
+                    send_string_to_LCD_XY (t_low, 0, 1);
+                    send_string_to_LCD(t_min);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (sms_send);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (off);
+                    chng_done = 1;
+                    sms_buff.sms_type = SMS_OFF;
+                }
+                else if ((todo_txt[5]=='H')&&(todo_txt[6]=='0'))
+                {
+                    buffer.flags.sms_T = 0;
+                    cli();
+                    eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
+                    sei();
+                    send_arr_to_LCD_XY(buffer.name, 0, 0);
+                    send_string_to_LCD_XY (t_high, 0, 1);
+                    send_string_to_LCD(t_max);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (sms_send);
+                    send_string_to_LCD (blank);
+                    send_string_to_LCD (off);
+                    chng_done = 1;
+                    sms_buff.sms_type = SMS_OFF;
+                }
+                sms_buff.dev_num = i;
+            }
+        }
+        if (!chng_done)
+        {
+            sms_buff.sms_type = NAME_ERR;
+            send_string_to_LCD_XY (name_error_sms, 0, 0);
+        }
     }
     else
     {
-        lcd_clr();
+        sms_buff.sms_type = COM_ERR;
         send_string_to_LCD_XY (com_error, 0, 0);
-        _delay_ms (1500);
     }
+    out_to_queue (&sms_buff);
 }
 
 /*			################################			начало блока обработчиков прерываний				##################*/
@@ -2210,13 +2462,16 @@ int main (void)
                         sei();
                         if (buffer.flags.sms_T) // если установлен флаг отправки sms, отправляем на lcd
                         {
+                            sms_buff.sms_type = T_LOW;
+                            sms_buff.dev_num = i;
+                            sms_buff.param = buffer.tmin;
+                            out_to_queue (&sms_buff);
                             lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
                             send_string_to_LCD (blank);
                             send_string_to_LCD (t_low);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
                             send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
-                            _delay_ms(2000);
                         }
                     }
                     else if ((temp_int_signed > buffer.tmax)&&(!buffer.flags.ht_alarm))				//если Т выше предела, а флаг не установлен
@@ -2227,25 +2482,28 @@ int main (void)
                         sei();
                         if (buffer.flags.sms_T) //если установлен флаг отправки sms, отправляем на lcd
                         {
+                            sms_buff.sms_type = T_HIGH;
+                            sms_buff.dev_num = i;
+                            sms_buff.param = buffer.tmax;
+                            out_to_queue (&sms_buff);
                             lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
                             send_string_to_LCD (blank);
                             send_string_to_LCD (t_high);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
                             send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
-                            _delay_ms(2000);
                         }
                     }
                     else if ((temp_int_signed > buffer.tmin)&&(buffer.flags.lt_alarm))				//если Т выше (T min), а флаг установлен
                     {
-                        buffer.flags.lt_alarm = 0; // снимаем флаг
+                        buffer.flags.lt_alarm = 0; 													// снимаем флаг
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                         sei();
                     }
                     else if ((temp_int_signed < buffer.tmax)&&(buffer.flags.ht_alarm))				//если Т ниже (T max) предела, а флаг установлен
                     {
-                        buffer.flags.ht_alarm = 0; // снимаем флаг
+                        buffer.flags.ht_alarm = 0; 													// снимаем флаг
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                         sei();
@@ -2267,7 +2525,6 @@ int main (void)
                         sms_buff.dev_num = i;					//записываем в буферную структуру номер аварийного устройства
                         sms_buff.param = 0;						//обнуляем параметр, здесь не нужен
                         out_to_queue (&sms_buff);				//ставим задачу на отправку смс
-                        _delay_ms(1500);
                     }
                 }
             }
