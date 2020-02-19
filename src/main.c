@@ -1264,6 +1264,7 @@ int main(void)
     uint8_t digits[N_DIGS]; //массив для передачи в utoa_fast_div для заполнения его кодами символов цифр температуры
     uint8_t msg[20]; //массив для выгрузки из кольцевого буфера
     int8_t last_t[n_max]; //массив целых частей последних измеренных температур со знаком
+    uint8_t sms [50];
     //int8_t *last_t = (void*) calloc(n_max, sizeof(*last_t));
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
@@ -1501,6 +1502,13 @@ int main(void)
                         arr_to_USART(buffer.name);
                         USART_TXD(' ');
                         string_to_USART(crash);
+                        USART_CRLF();
+                        for (uint8_t i=0; i<50; i++)
+                            sms [i]=0;
+                        strcat ((char*)sms, (char*)buffer.name);
+                        strcat_P ((char*)sms, (char*)(PGM_P) blank);
+                        strcat_P ((char*)sms, (char*)(PGM_P) crash);
+                        arr_to_USART(sms);
                         USART_CRLF();
                         _delay_ms(1500);
                     }
