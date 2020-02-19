@@ -159,17 +159,17 @@ unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
 unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
 unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
 unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
-unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса с открывающими кавычками номера телефона
+unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса
 //unsigned char TEXT_100[]		PROGMEM = "#100#\"";		// номер баланса, пока здесь
 unsigned char ANS_CUSD[]		PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
 unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
 unsigned char ANS_COPS[]		PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
 unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
 unsigned char ANS_CPBF[]		PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
-unsigned char USER_0[]			PROGMEM = "USER_0";			// имя админа с открывающими и закрывающими кавычками
-unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя с открывающими и закрывающими кавычками
-unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans с открывающими и закрывающими кавычками
-unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку с открывающими кавычками номера телефона
+unsigned char USER_0[]			PROGMEM = "ADMIN";			// имя админа
+unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя
+unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans
+unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку
 unsigned char CELL_1[]			PROGMEM = "1,\"";			// запрос на запись в сим в ячейку 1 с открывающими кавычками номера телефона
 unsigned char CELL_2[]			PROGMEM = "2,\"";			// запрос на запись в сим в ячейку 2 с открывающими кавычками номера телефона
 unsigned char CELL_3[]			PROGMEM = "3,\"";			// запрос на запись в сим в ячейку 3 с открывающими кавычками номера телефона
@@ -315,10 +315,10 @@ uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа мод
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
 /* варианты значений для шаблонов смс */
 enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
-    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, USER, MEMBERS};
+    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, MEMBERS};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
 struct tel_list phones = {	{'#','0','0','0','#','\0',},
-                              {'+','0','0','0','0','0','0','0','0','0','0','0','\0'},
+                              {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
                               {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
                               {'0','0','0','\0'}};	// структура с телефонами
 unsigned char gsm_sig;					// грязное значение уровня сигнала из ответа модема на запрос (0...31->0...100)
@@ -1375,12 +1375,6 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                     arr_to_TX_Ring (phones.phone_0);
                     break;
 
-                case USER:
-                    string_to_TX_Ring (USER_1);
-                    string_to_TX_Ring (NEW_LN);
-                    arr_to_TX_Ring (phones.phone_1);
-                    break;
-
                 case MEMBERS:								// отправка по схеме длинной смс
                     if (UCSR0B & (1<<UDRIE0)) {return 0;}	// ждём пока не сбросится флаг после предыдущего разрешения прерывания
                     switch (k)								// здесь "к" - счётчик строк, чтобы не вводить ещё одну static переменную
@@ -1581,7 +1575,7 @@ uint8_t parser(void) // разбор текста msg
         {
             for (uint8_t i = 0; i < 12; i++)
             {
-                phones.phone_0[i] = txt_ptr[25 + i];
+                phones.phone_0[i] = txt_ptr[23 + i];
             }
             cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
             sms_buff.sms_type = ADMIN;										// отправляем подтверждение отправителю
@@ -2030,7 +2024,7 @@ void to_do (void)			// модуль разбора и выполнения команды
             if (j == 12)													// если записан + и 12 цифр
             {
                 cmd_to_queue (AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);	//записываем этот телефон на сим
-                sms_buff.sms_type = USER;									// отправляем подтверждение админу
+                sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
                 out_to_queue (&sms_buff);
             }
         }
@@ -2068,7 +2062,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 out_to_queue (&sms_buff);
             }
         }
-        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
+        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL );// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
     }
 
     else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)	// если в todo_txt есть DELETE
