@@ -54,6 +54,8 @@
 #define MYUBRR 103 // скорость usart 9600
 #define RX_RING_SIZE 256 // размер буфера берём пока 256, в дальнейшем нужно обеспечить размер равный степени 2.
 #define RX_IND_MSK (RX_RING_SIZE - 1) // маска для индексов кольцевого буфера приёмника, нужно лля обнуления индекса при переходе через RX_RING_SIZE->0
+#define TX_RING_SIZE 256
+#define TX_IND_MSK (TX_RING_SIZE - 1)
 
 // блок текстовых сообщений во флэш
 unsigned char absence[] PROGMEM = "Нет датчиков"; //ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
@@ -138,9 +140,14 @@ const uint16_t dev_last_n = (EEP_MEM - 2);//константа, содержащая значение адрес
 //нужно для корректного продолжения автоматической нумерации в именах при добавлении в интерактивном режиме после удаления устройств через меню интерактивного удаления
 const uint8_t n_max = (uint8_t)((EEP_MEM - 2) / sizeof(device)); //максимально допустимое количество усройств в епром
 uint8_t scratchpad [9]; //массив байтов, прочитанных из блокнота DS18B20
-volatile uint8_t RX_IndexIN;// входящий индекс кольцевого буфера, здесь обязательно volatile, меняется только в прерывании
-uint8_t RX_IndexOUT; // выходящий индекс кольцевого буфера
-uint8_t RX_ring[RX_RING_SIZE]; //массив для кольцевого буфера
+
+volatile uint8_t RX_IndexIN;// входящий индекс кольцевого буфера приёмника, здесь обязательно volatile, меняется только в прерывании
+uint8_t RX_IndexOUT; // выходящий индекс кольцевого буфера приёмника
+uint8_t RX_ring[RX_RING_SIZE]; //массив для кольцевого буфера приёмника
+uint8_t TX_IndexIN;// входящий индекс кольцевого буфера передатчика,
+volatile uint8_t TX_IndexOUT; // выходящий индекс кольцевого буфера передатчика; здесь обязательно volatile, меняется только в прерывании
+uint8_t TX_ring[TX_RING_SIZE]; //массив для кольцевого буфера передатчика
+
 volatile uint8_t flash_cnt; //счётчик прерываний для индикации уровня gsm вспышками диода
 volatile uint8_t flash_num; //число прошедших вспышек
 volatile uint8_t pause_num; //число прошедших отрезков пауз между сериями вспышек
@@ -1013,8 +1020,9 @@ void add_ID(void) // режим удаления/добавления/вставки устройств
     return;
 }
 
-// Функция очистки кольцевого буфера
-void ClearRing(void)
+/*																		начало блока функций работы с приёмником */
+// Функция очистки кольцевого буфера приёмника
+void Clear_RX_Ring(void)
 {
     cli();
     RX_IndexIN = 0;
@@ -1022,7 +1030,7 @@ void ClearRing(void)
     sei();
 }
 
-// Функция возвращает количество непрочитанных байт в кольцевом буфере
+// Функция возвращает количество непрочитанных байт в кольцевом буфере приёмника
 uint8_t RX_IndexNumber(void)
 {
     return (RX_IndexIN - RX_IndexOUT) & RX_IND_MSK; //как ни странно, но это то же самое, что ниже в комментариях
@@ -1038,7 +1046,7 @@ uint8_t RX_IndexNumber(void)
 */
 }
 
-// Функция загрузки байта данных в кольцевой буфер
+// Функция загрузки байта данных в кольцевой буфер приёмника
 uint8_t UDR_to_RX_Ring(char value)
 {
     if (((RX_IndexIN + 1) & RX_IND_MSK) == RX_IndexOUT)
@@ -1052,7 +1060,7 @@ uint8_t UDR_to_RX_Ring(char value)
     }
 }
 
-// Функция выгрузки строки данных из кольцевого буфера
+// Функция выгрузки строки данных из кольцевого буфера в массив для разбора команд
 void RX_Ring_to_Str(uint8_t *str, uint8_t lenght)
 {
     for(uint8_t i=0; i<lenght; i++)
@@ -1064,11 +1072,136 @@ void RX_Ring_to_Str(uint8_t *str, uint8_t lenght)
     }
 }
 
-// наличие не прочитанных данных в кольцевом буфере
-uint8_t GetData(void)
+// наличие не прочитанных данных в кольцевом буфере приёмника
+uint8_t Get_RX_Data(void)
 {
     if(RX_IndexIN != RX_IndexOUT) return 1;
     return 0;
+}
+/*																			конец блока функций работы с приёмником */
+
+/*																			начало блока функций работы с передатчиком */
+// Функция очистки кольцевого буфера передатчика
+void Clear_TX_Ring(void)
+{
+    cli();
+    TX_IndexIN = 0;
+    TX_IndexOUT = 0;
+    sei();
+}
+
+/*
+// Функция возвращает количество непрочитанных байт в кольцевом буфере передатчика
+uint8_t TX_IndexNumber(void)
+{
+	return (TX_IndexIN - TX_IndexOUT) & TX_IND_MSK;
+}
+*/
+
+// наличие не прочитанных данных в кольцевом буфере передатчика
+uint8_t Get_TX_Data(void)
+{
+    if(TX_IndexIN != TX_IndexOUT) return 1;
+    return 0;
+}
+
+void USART_TXD(uint8_t data) // Передача байта по UART
+{
+    while (!( UCSR0A & (1 << UDRE0))) {;} // Ждем пока не отправятся предыдущие данные
+    UDR0 = data;	// Отпраляем текущие данные
+}
+
+void USART_CRLF(void) //передача CR и LF
+{
+    USART_TXD('\r');
+    USART_TXD('\n');
+}
+
+void arr_to_USART(uint8_t *s ) // Передача массива по UART
+{
+    while(*s)
+    {
+        USART_TXD(*s++);
+    }
+}
+
+void string_to_USART(const uint8_t *s ) // Передача сроки из флэш по UART
+{
+    while(pgm_read_byte(s))
+    {
+        USART_TXD(pgm_read_byte(s++));
+    }
+}
+
+//функция отправки байта в кольцевой буфер передатчика
+void byte_to_TX_Ring(uint8_t byte)
+{
+    if (((TX_IndexIN + 1) & TX_IND_MSK) == TX_IndexOUT)
+    {
+        send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
+        string_to_USART (rx_ring_ovf);
+    }
+    while (((TX_IndexIN + 1) & TX_IND_MSK) == TX_IndexOUT) {;} //если голова догнала хвост, ждём
+    TX_IndexIN++;
+    TX_IndexIN &= TX_IND_MSK;
+    TX_ring[TX_IndexIN] = byte;
+}
+
+//функция отправки массива в кольцо передатчика
+void arr_to_TX_Ring(uint8_t *s)
+{
+    while(*s)
+        byte_to_TX_Ring(*s++);
+}
+
+//функция отправки строки из флэш в кольцо передатчика
+void string_to_TX_Ring(const uint8_t *s)
+{
+    while(pgm_read_byte(s))
+        byte_to_TX_Ring(pgm_read_byte(s++));
+}
+
+//функция отправки символов CR и LF в кольцо передатчика
+void CRLF_to_TX_Ring(void)
+{
+    byte_to_TX_Ring('\r');
+    byte_to_TX_Ring('\n');
+}
+/*																				конец блока функций работы с передатчиком */
+
+ISR(USART_RX_vect) // Обработчик прерывания для передатчика по приходу данных в UDR0
+{
+    uint8_t temp; //временная переменная для приёма из UDR0
+    uint8_t wr_err; //код успешности записи в кольцо
+    if(UCSR0A & (1 << FE0))// Ошибка кадрирования, не пишем новые данные, сообщаем
+    {
+        send_string_to_LCD_XY(frame_err, 0, 0);
+        string_to_USART (frame_err);
+        _delay_ms(1500);
+    }
+    else
+    {
+        temp = UDR0;
+        //if(!(temp == 0x0A || temp == 0x0D))
+        wr_err = UDR_to_RX_Ring(temp);// запрашиваем запись в кольцо и принимаем код успешности
+        if(wr_err == 1) //при ошибке переполнения выводим сообщение, данные в UDR_to_RX_Ring не записаны
+        {
+            send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
+            string_to_USART (rx_ring_ovf);
+            _delay_ms(1500);
+        }
+    }
+}
+
+ISR (USART_UDRE_vect)  // Обработчик прерывания по опустошению UDR передатчика
+{
+    TX_IndexOUT++;
+    TX_IndexOUT &= TX_IND_MSK;      //проверка маски кольцевого буфера
+    UDR0 = TX_ring[TX_IndexOUT];  //запись из кольцевого буфера в UDR
+    if (!Get_TX_Data()) //если буфер уже пуст
+    {
+        UCSR0B &= ~(1<<UDRIE0); //запрет прерывания по опусошению UDR передатчика
+    }
 }
 
 ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
@@ -1113,58 +1246,6 @@ void USART_Init( unsigned int ubrr)
     UCSR0C = (1 << UCSZ01)|(1 << UCSZ00)|(1 << USBS0); //8 бит, 1 стоп бит
 }
 
-void USART_TXD(uint8_t data) // Передача байта по UART
-{
-    while (!( UCSR0A & (1 << UDRE0))) {;} // Ждем пока не отправятся предыдущие данные
-    UDR0 = data;	// Отпраляем текущие данные
-}
-
-void USART_CRLF(void) //передача CR и LF
-{
-    USART_TXD('\r');
-    USART_TXD('\n');
-}
-
-void arr_to_USART(uint8_t *s ) // Передача массива по UART
-{
-    while(*s)
-    {
-        USART_TXD(*s++);
-    }
-}
-
-void string_to_USART(const uint8_t *s ) // Передача сроки из флэш по UART
-{
-    while(pgm_read_byte(s))
-    {
-        USART_TXD(pgm_read_byte(s++));
-    }
-}
-
-ISR(USART_RX_vect) // Обработчик прерывания по приходу данных в UDR0
-{
-    uint8_t temp; //временная переменная для приёма из UDR0
-    uint8_t wr_err; //код успешности записи в кольцо
-    if(UCSR0A & (1 << FE0))// Ошибка кадрирования, не пишем новые данные, сообщаем
-    {
-        send_string_to_LCD_XY(frame_err, 0, 0);
-        string_to_USART (frame_err);
-        _delay_ms(1500);
-    }
-    else
-    {
-        temp = UDR0;
-        //if(!(temp == 0x0A || temp == 0x0D))
-        wr_err = UDR_to_RX_Ring(temp);// запрашиваем запись в кольцо и принимаем код успешности
-        if(wr_err == 1) //при ошибке переполнения выводим сообщение, данные в UDR_to_RX_Ring не записаны
-        {
-            send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
-            string_to_USART (rx_ring_ovf);
-            _delay_ms(1500);
-        }
-    }
-}
-
 //начало основой программы
 int main(void)
 {
@@ -1182,7 +1263,8 @@ int main(void)
     uint8_t chng_done = 0; // признак успешного изменения через UART
     uint8_t digits[N_DIGS]; //массив для передачи в utoa_fast_div для заполнения его кодами символов цифр температуры
     uint8_t msg[20]; //массив для выгрузки из кольцевого буфера
-    int8_t *last_t = (void*) calloc(n_max, sizeof(*last_t));
+    int8_t last_t[n_max]; //массив целых частей последних измеренных температур со знаком
+    //int8_t *last_t = (void*) calloc(n_max, sizeof(*last_t));
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
     // LCD_COM_PORT = 0x00; // ставим 0 в RS и EN, раскомментировать если DAT и COM цеплять на разные порты
@@ -1194,7 +1276,8 @@ int main(void)
     DDR_LED_PORT |= _BV(LED_PIN_NUM); //ставим 1 - пин led активирован на выход
 
     USART_Init(MYUBRR); //включаем UART
-    ClearRing();	// Сбросить буфер
+    Clear_RX_Ring(); // Сбросить буфер приёмника
+    Clear_TX_Ring(); // Сбросить буфер передатчика
 
     TIMSK0 |= (1<<TOIE0);  // разрешаем прерывание по переполнению
     TCCR0B |= (1<<CS02) | (1<<CS00); // делитель частоты 1024
@@ -1418,8 +1501,7 @@ int main(void)
                         arr_to_USART(buffer.name);
                         USART_TXD(' ');
                         string_to_USART(crash);
-                        USART_TXD('\r');
-                        USART_TXD('\n');
+                        USART_CRLF();
                         _delay_ms(1500);
                     }
                     Dig_1 = '-';
@@ -1469,7 +1551,7 @@ int main(void)
                         case 0 :
                             break;
                     }
-                    if(GetData()) //пока идёт индикация проверяем кольцевой буфер
+                    if(Get_RX_Data()) //пока идёт индикация проверяем кольцевой буфер
                     {
                         _delay_ms(100); //чтобы долетели остатки посылки
                         uint8_t num = RX_IndexNumber(); //сколько байт в кольцевом буфере
@@ -1643,11 +1725,12 @@ int main(void)
                             for (i=0; i<n; i++)
                             {
                                 eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-                                arr_to_USART (buffer.name);
-                                string_to_USART(blank);
-                                USART_TXD(((last_t[j] & 0b10000000) ? '-' : '+'));
-                                arr_to_USART(utoa_fast_div (((last_t[i] & 0b10000000) ? ((~last_t[i]) + 1) : last_t[i]), digits));
-                                USART_CRLF();
+                                arr_to_TX_Ring(buffer.name);
+                                string_to_TX_Ring(blank);
+                                byte_to_TX_Ring(((last_t[i] & 0b10000000) ? '-' : '+'));
+                                arr_to_TX_Ring(utoa_fast_div (((last_t[i] & 0b10000000) ? ((~last_t[i]) + 1) : last_t[i]), digits));
+                                CRLF_to_TX_Ring();
+                                UCSR0B |= (1<<UDRIE0); //разрешение прерывания по опустошению UDR передатчика
                             }
                         }
                         else
