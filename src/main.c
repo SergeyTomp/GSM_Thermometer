@@ -47,7 +47,7 @@ unsigned char present_n[] PROGMEM = "Найдено датч. "; //количество устройств, оп
 unsigned char dev_excess[] PROGMEM = "Много датчиков"; //ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
 unsigned char error[] PROGMEM = "Ошибка CRC-ID "; //ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
 unsigned char init_n[] PROGMEM = "Исправн.датч. "; //количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
-unsigned char init_srch[] PROGMEM = "Выполните поиск"; // ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
+unsigned char init_srch[] PROGMEM = "Выполнить поиск?"; // ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
 unsigned char scratch_err[] PROGMEM = "Ош.CRC-блкн. "; //ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
 unsigned char no_answer_n[] PROGMEM = "Нет ответа "; //ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится имя датчика
 unsigned char ow_check[] PROGMEM = "Опрос линии"; //сообщение в main при нормальном входе во время переклички
@@ -56,6 +56,8 @@ unsigned char quick[] PROGMEM = "кратко"; // тестовое сообщение при кратком нажа
 unsigned char correction[] PROGMEM = "Корректировка"; // сообщение в add_ID при входе
 unsigned char subst_add[] PROGMEM = "Замена/добавл-е"; // сообщение в add_ID при входе в блок замены/удаления
 unsigned char total_qty[] PROGMEM = "Всего устройств"; // сообщение в add_ID перед началом поиска
+unsigned char plug_in[] PROGMEM = "Подключите устр."; // сообщение в add_ID перед началом поиска
+unsigned char press_btn[] PROGMEM = "и нажмите кнопку"; // сообщение в add_ID перед началом поиска
 unsigned char mem_full[]PROGMEM = "Память заполнена";//сообщение в add_ID, если количество датчиков уже 50, а неактивных нет
 unsigned char new_dev_fnd[] PROGMEM = "Найдено новое"; // верхняя строка сообщения в add_ID, если найдено новое
 unsigned char nev_dev_add[] PROGMEM = "Добавлено новое"; //верхняя строка сообщения в add_ID в конце блока добавления
@@ -205,7 +207,6 @@ void lcd_init(void)
     lcd_com(0x01); // очистка дисплея
     _delay_us(3000);// время выполнения очистки не менее 1.5ms
     lcd_com(0x0C); //включение экрана 0000 1100(bin)
-    //lcd_com(0x80); // Будем выводить строку в 1-ю верхнюю левую позицию 1 строки экрана
 }
 
 void send_string_to_LCD_XY(const uint8_t *s, uint8_t x, uint8_t y)
@@ -256,11 +257,6 @@ void lcd_clr(void)
 // функция выводит знаки на LCD, вызывается из Frame
 void Display (uint8_t line_qty)
 {
-    //if (!line_qty) //если строка только одна (верхняя) - чистим дисплей, но выводим первую строку в любом случае
-    //{
-    //	lcd_com(0x01); // очистка дисплея
-    //	_delay_us(1500);// время выполнения очистки не менее 1.5ms
-    //}
     send_arr_to_LCD_XY (line_up.name, 0, 0); //выводим имя устройства в 0-ю позицию 1 строки экрана
     lcd_dat_XY(line_up.sign, 8, 0);// выводим температуру в 8-ю (от 0) позицию 1 строки экрана
     lcd_dat(line_up.dig_1);
@@ -279,10 +275,7 @@ void Display (uint8_t line_qty)
     }
 }
 
-// Функция подготовки кадра (вызывается из main):
-// выделяет цифры из трехзначного числа Number,
-// распределяет вывод целого и десятичного заначения по символам,
-// заполняет массив строк для индикации на LCD
+// Функция подготовки кадра (вызывается из main), заполняет массив строк для индикации на LCD
 void Frame (uint8_t Dig1, uint8_t Dig2, uint8_t Dig3, uint8_t sign, uint8_t i, uint8_t n)
 //определяем строку LCD: i это № устр-в: 0,2,4... верхняя, 1,3,5... нижняя
 {
@@ -321,7 +314,6 @@ void Frame (uint8_t Dig1, uint8_t Dig2, uint8_t Dig3, uint8_t sign, uint8_t i, u
         Display (1);// передаём в функцию вывода кол-во строк кадра: 0->1 строка, 1->2 строки
     }
 }
-
 
 // Функция инициализации датчиков
 unsigned char init_device(void)
@@ -606,36 +598,6 @@ void search_ID(void)
     sei();
 }
 
-/*
-// Функция выводит на LCD побитно байты 2, 3, 4 конф.регистра
-void Disp_pad (void)
-{
-	lcd_com(0x01); // очистка дисплея
-	_delay_us(1500);// время выполнения очистки не менее 1.5ms
-	uint8_t j;
-	uint8_t bit;
-	for (j=2; j<5; j++)
-	{
-		switch (j)
-		{
-			case 2 : lcd_com(0x80);
-			break;
-			case 3 : lcd_com(0xC0);
-			break;
-			case 4 : lcd_com(0x88);
-			break;
-		}
-
-		for (bit=0x80; bit !=0;)
-		{
-			if (scratchpad[j] & bit)
-				lcd_dat('1');
-			else
-				lcd_dat('0');
-			bit = bit >> 1;
-		}
-	}
-}	*/
 // функция чтения блокнота датчика
 uint8_t scratchpad_rd (void)
 {
@@ -748,40 +710,45 @@ void add_ID(void)
     press_time = 0; //обнуляем результат идентификации длины нажатия, чтобы не отработал повторно
 
     lcd_clr(); // очистка дисплея
-    send_string_to_LCD_XY (delete, 0, 0); //выводим "Удалить?"
-    while (!press_time) {;} // пока кнопка не отпущена, ждём
-    if (press_time == SLOW)
+    if (n) // пропускаем раздел удаления, если n==0
     {
-        press_time = 0; //обнуляем результат идентификации длины нажатия, чтобы не отработал повторно
-        for (i=0; i < n; i++)
+        send_string_to_LCD_XY (delete, 0, 0); //выводим "Удалить?"
+        while (!press_time) {;} // пока кнопка не отпущена, ждём
+        if (press_time == SLOW)
         {
-            eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer));// считываем описание усройства из епром
-            send_arr_to_LCD_XY (buffer.name, 0, 1);
-            while (!press_time) {;} //пока кнопка не отпущена, ждём
-            if (press_time == SLOW)
+            press_time = 0; //обнуляем результат идентификации длины нажатия, чтобы не отработал повторно
+            for (i=0; i < n; i++)
             {
-                press_time = 0;
-                cli();
-                for (; i < n; i++)
+                eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer));// считываем описание усройства из епром
+                send_arr_to_LCD_XY (buffer.name, 0, 1);
+                while (!press_time) {;} //пока кнопка не отпущена, ждём
+                if (press_time == SLOW)
                 {
-                    eeprom_read_block (&buffer, &ee_arr[i+1], sizeof(buffer));// считываем описание следующего усройства из епром
-                    eeprom_update_block (&buffer, &ee_arr[i], sizeof(buffer)); // перемещаем в епром описание следующего усройства на текущую строку
+                    press_time = 0;
+                    cli();
+                    for (; i < n; i++)
+                    {
+                        eeprom_read_block (&buffer, &ee_arr[i+1], sizeof(buffer));// считываем описание следующего усройства из епром
+                        eeprom_update_block (&buffer, &ee_arr[i], sizeof(buffer)); // перемещаем в епром описание следующего усройства на текущую строку
+                    }
+                    eeprom_update_byte ((uint8_t*)dev_qty, (n-1));
+                    sei();
+                    lcd_clr(); // очистка дисплея
+                    send_string_to_LCD_XY (del_done, 0, 0); //выводим "Удалено"
+                    _delay_ms (2000);
+                    lcd_clr(); // очистка дисплея
+                    return;
                 }
-                eeprom_update_byte ((uint8_t*)dev_qty, (n-1));
-                sei();
-                lcd_clr(); // очистка дисплея
-                send_string_to_LCD_XY (del_done, 0, 0); //выводим "Удалено"
-                _delay_ms (2000);
-                lcd_clr(); // очистка дисплея
-                return;
+                press_time = 0;
             }
         }
+        press_time = 0; //обнуляем результат идентификации длины нажатия, чтобы не отработал повторно
     }
-    press_time = 0; //обнуляем результат идентификации длины нажатия, чтобы не отработал повторно
 
     lcd_clr(); // очистка дисплея
     send_string_to_LCD_XY (subst_add, 0 ,0);//выводим "Замена/добавление"
     _delay_ms(1500);
+
     //while (!press_time) {;} //ждём отпускания кнопки
     //в main сделать возможным переход сюда по длнному нажатию до отпускания кнопки
 
@@ -816,12 +783,19 @@ void add_ID(void)
             }
         }
     }
+    lcd_clr(); // очистка дисплея
+    send_string_to_LCD_XY (plug_in, 0, 0); //выводим "Подключите устр-во"
+    send_string_to_LCD_XY (press_btn, 0, 1); //выводим "и нажмите кнопку"
+    while (!press_time) {;} //ждём нажатия
+    press_time = 0;
+
     do
     {
         New_conflict = 0;
         m++;
-        if (m > N_MAX) //если число устройств превысило 50, не влезет в епром
+        if (m > N_MAX) //если число устройств превысило 50, не влезет в епром, можно убрать, это делается чуть выше и выбрасывает в main, если нет неактивных устройств
         {
+            lcd_clr(); // очистка дисплея
             // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
             send_string_to_LCD_XY (dev_excess, 0 ,0);//выводим "много датчиков"
             _delay_ms(1500);
@@ -835,14 +809,17 @@ void add_ID(void)
             send_string_to_LCD_XY (error, 0, 0);//выводим "ошибка иниц."
             _delay_ms(2000);
         }
-        for (i = 0; i < n; i++) //начинаем сравнение найденного ID с имеющимися в епром
+
+        //начинаем сравнение найденного ID с имеющимися в епром
+        i = 0;
+        do //цикл for(i=0;i<n;i++) заменён на do-while(i<n), иначе при n==0 в него не попасть, т.к. i==n==0 сразу.
         {
             eeprom_read_block (&buffer.code, &ee_arr[i].code, sizeof(buffer.code));// считываем ID усройства из епром
             if (!strncmp((void*)data, (void*)buffer.code, sizeof data)) // если найденный ID совпал с записанным в епром - запрос нового ID
                 //приходится использовать явное приведение к void*, т.к. strncmp не жрёт ничего, кроме char*, а у нас unsigned char*
                 break;	//выход в do_while
-            else if (strncmp((void*)data, (void*)buffer.code, sizeof data) && (i == (n-1))) // если найденный ID не совпал ни с одним записанным в епром -> найдено новое устр-во
-                //приходится использовать явное приведение к void*, т.к. strncmp не жрёт ничего, кроме char*, а у нас unsigned char*
+            else if (strncmp((void*)data, (void*)buffer.code, sizeof data) && ((i == (n-1))||(i == n))) // если найденный ID не совпал ни с одним записанным в епром -> найдено новое устр-во
+                //при несовпадении найденного ни с одним записанным для случая n==0 к условию i==(n-1) добавлено условие ||(i==n) , иначе эта строка при n==0 не работает
             {
                 lcd_clr(); // очистка дисплея
                 send_string_to_LCD_XY (new_dev_fnd, 0, 0); //выводим "найдено новое"
@@ -850,33 +827,36 @@ void add_ID(void)
                 send_string_to_LCD_XY (element, 0, 1); //выводим "устройство"
                 _delay_ms(1500);
                 lcd_clr(); // очистка дисплея
-                for (i = 0; i < n; i++)
+                if (n) // пропускаем раздел замены, если n==0
                 {
-                    eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));//считываем флаг текущего 1W устройства из епром
-                    if (!buffer.flags.active) // ищем неактивное устройство
+                    for (i = 0; i < n; i++)
                     {
-                        eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-                        send_string_to_LCD_XY (substitute, 0, 0); // выводим "Заменить?"
-                        send_arr_to_LCD_XY (buffer.name, 0, 1); // выводим имя неактивного датчика
-                        while (!press_time) {;} //ждём нажатия
-                        if (press_time == SLOW) // если долго - заменяем и выходим в main, иначе ищем другое нективное устройство или выходим в блок добавления
+                        eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));//считываем флаг текущего 1W устройства из епром
+                        if (!buffer.flags.active) // ищем неактивное устройство
                         {
-                            // запись ID-кода 1-го 1W устройства в ID_string и копирование его в буфер-структуру
-                            for (j=0; j < 8; j++)   {buffer.code[j] = data[j];}
-                            buffer.flags.active = 1; // датчик активен
-                            cli();
-                            eeprom_update_block (&buffer.code, &ee_arr[i].code, sizeof(buffer.code)); // записываем в епром ID-код нового 1W устройства.
-                            eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags)); //записываем в епром флаг нового 1W устройства.
-                            sei();
-                            lcd_clr(); // очистка дисплея
-                            send_string_to_LCD_XY (done, 0, 0); //выводим "Выполнено"
-                            _delay_ms(1500);
-                            lcd_clr(); // очистка дисплея
-                            return; //сразу возврат в main
-                        } //если жим короткий, ищем другое неактивное устройство
-                        press_time = 0; // чтобы в блоке добавления автоматом не отработал короткий жим
-                    }
-                } //если прошли весь цикл и не вышли в main, переходим в блок добавления в конец списка в епром
+                            eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                            send_string_to_LCD_XY (substitute, 0, 0); // выводим "Заменить?"
+                            send_arr_to_LCD_XY (buffer.name, 0, 1); // выводим имя неактивного датчика
+                            while (!press_time) {;} //ждём нажатия
+                            if (press_time == SLOW) // если долго - заменяем и выходим в main, иначе ищем другое нективное устройство или выходим в блок добавления
+                            {
+                                // запись ID-кода 1-го 1W устройства в ID_string и копирование его в буфер-структуру
+                                for (j=0; j < 8; j++)   {buffer.code[j] = data[j];}
+                                buffer.flags.active = 1; // датчик активен
+                                cli();
+                                eeprom_update_block (&buffer.code, &ee_arr[i].code, sizeof(buffer.code)); // записываем в епром ID-код нового 1W устройства.
+                                eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags)); //записываем в епром флаг нового 1W устройства.
+                                sei();
+                                lcd_clr(); // очистка дисплея
+                                send_string_to_LCD_XY (done, 0, 0); //выводим "Выполнено"
+                                _delay_ms(1500);
+                                lcd_clr(); // очистка дисплея
+                                return; //сразу возврат в main
+                            } //если жим короткий, ищем другое неактивное устройство
+                            press_time = 0; // чтобы в блоке добавления автоматом не отработал короткий жим
+                        }
+                    } //если прошли весь цикл и не вышли в main, переходим в блок добавления в конец списка в епром
+                }
                 lcd_clr(); // очистка дисплея
                 send_string_to_LCD_XY (add_to_end, 0, 0);//выводим "Добавить?"
                 while (!press_time) {;} //ждём нажатия
@@ -926,7 +906,9 @@ void add_ID(void)
                     return;
                 }
             }
+            i++;
         }
+        while (i < n);
     }
     while (last_conflict != 0); // пока номер бита конфликта не равен 0, если равен то все датчики найдены
     // если найдены все устройства, но замены или добавления не произошло, выходим в main без изменений
@@ -974,16 +956,19 @@ int main(void)
         search_ID(); //призводим дешифрацию всех ID-кодов
         srch_done = 1; //признак выполненной полной дешифрации
     }
+    while (!(n = eeprom_read_byte((uint8_t*)dev_qty)))//обновляем и проверяем n, если 0 - идём в корректировку, ходим по кругу, пока n==0;
+    {
+        lcd_clr(); // очистка дисплея
+        send_string_to_LCD_XY (absence, 0, 0); //выводим "Нет датчиков"
+        send_string_to_LCD_XY (init_srch, 0, 1);// выводим "Выполнить поиск?"
+        while (!press_time) {;} // пока кнопка не отпущена, ждём
+        add_ID ();
+        press_time = 0;
+        srch_done = 1; //признак выполненного добавления устройств
+    }
+
     if (!srch_done) // если дешифрация не выполнялась, переходим к опросу ранее записанных и далее к измерениям
     {
-        n = eeprom_read_byte((uint8_t*)dev_qty); //считываем из епром число записанных в епром усройств
-        if (!n) // если n==0, поиск не производился, в епром пусто или мусор
-        {
-            lcd_clr(); // очистка дисплея
-            send_string_to_LCD_XY (init_srch, 0, 0);// выводим "Выполните поиск"
-            abort ();
-        }
-
         lcd_clr(); // очистка дисплея
         // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
         send_string_to_LCD_XY (ow_check, 0, 0);// сообщение "опрос линии"
@@ -1028,7 +1013,7 @@ int main(void)
         n = eeprom_read_byte((uint8_t*)dev_qty); //читаем количество датчиков, записанных в епром
         for (i = 0; i< n; i++) //начинаем опрос с первого датчика (от 0)
         {
-            switch (press_time) //тестовый блок детектирования нажатия кнопки и переходов по длительности жима
+            switch (press_time) // блок детектирования нажатия кнопки и переходов по длительности жима
             {
                 case QUICK :
                     lcd_clr(); // очистка дисплея
@@ -1038,8 +1023,14 @@ int main(void)
                     break;
                 case SLOW :
                     add_ID ();
+                    //обновляем и проверяем n, если 0 - возврат в корректировку(при возврате сюда после удаления всех датчиков в меню корректировки)
+                    while (!(n = eeprom_read_byte((uint8_t*)dev_qty)))
+                    {
+                        send_string_to_LCD_XY (absence, 0, 0); //выводим "Нет датчиков"
+                        _delay_ms(1500);
+                        add_ID ();
+                    }
                     i = 0; // чтобы по возвращении индикация пошла сначала
-                    n = eeprom_read_byte((uint8_t*)dev_qty); //обновляем n
                     press_time = 0;
                     break;
                 case 0 :
@@ -1079,7 +1070,7 @@ int main(void)
                 }
                 init_device();	// сброс датчиков для прекращения передачи данных
                 // преобразуем полученное в значение температуры
-                if (!(temperature[4] == 0xFF)) //если конф.байт станет вдруг =1, то датчик замолчал.
+                if (!(temperature[4] == 0xFF)) //если конф.байт станет вдруг ==FF, то датчик замолчал.
                 {
                     if ((temperature[1]&0b10000000) == 0) // проверка на отрицательность температуры
                         temp_sign =0; //рисуем плюс на ЖКИ
@@ -1149,8 +1140,6 @@ int main(void)
             {
                 _delay_ms(2000);
             }
-            //temp_int = 0;
-            //temp_float = 0;
         }
     }	// закрывающая скобка бесконечного цикла
 }      // закрывающая скобка основной программы
