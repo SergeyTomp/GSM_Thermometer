@@ -44,7 +44,7 @@ unsigned char no_answer_n[] PROGMEM = "Нет ответа "; //ошибка на этапе чтения чт
 unsigned char ow_check[] PROGMEM = "Опрос линии";
 
 // блок глобальных переменных и структур
-unsigned char temp_sign; // признак знака температуры для ф-ции вывода на ЖКИ
+
 typedef struct //структура для параметров устройства
 {
     unsigned char name[8]; // имя 1W устройства
@@ -164,7 +164,7 @@ void lcd_init(void)
     //lcd_com(0x80); // Будем выводить строку в 1-ю верхнюю левую позицию 1 строки экрана
 }
 
-// функция выводит знаки на LCD, вызывается из Disp_prep
+// функция выводит знаки на LCD, вызывается из Frame
 void Display (uint8_t line_qty)
 {
     if (!line_qty) //если строка только одна (верхняя) - чистим дисплей, но выводим первую строку в любом случае
@@ -175,49 +175,22 @@ void Display (uint8_t line_qty)
     lcd_com(0x80); // выводим имя в 1-ю верхнюю левую позицию 1 строки экрана
     send_arr_to_LCD (line_up.name); //выводим имя устройства
     lcd_com(0x88); // выводим температуру в 8-ю (от 0) позицию 1 строки экрана
-    switch (line_up.sign)
-    {
-        case 0 : lcd_dat('+');
-            break;
-        case 1 : lcd_dat('-');
-            break;
-        case 0x0F : lcd_dat('?');
-            break;
-    }
-    /*
-    if (!line_up.sign)
-        {lcd_dat('+');}
-    else
-        {lcd_dat('-');}
-    }*/
-    lcd_dat(line_up.dig_1 + '0');
-    lcd_dat(line_up.dig_2 + '0');
+    lcd_dat(line_up.sign);
+    lcd_dat(line_up.dig_1);
+    lcd_dat(line_up.dig_2);
     lcd_dat('.');
-    lcd_dat(line_up.dig_3 + '0');
+    lcd_dat(line_up.dig_3);
 
     if (line_qty)	//выводим вторую строку, если она есть
     {
         lcd_com(0xC0); // выводим строку в 1-ю верхнюю левую позицию 2 строки экрана
         send_arr_to_LCD (line_dn.name); //выводим имя устройства
         lcd_com(0xC8); // выводим температуру в 8-ю (от 0) позицию 2 строки экрана
-        switch (line_dn.sign)
-        {
-            case 0 : lcd_dat('+');
-                break;
-            case 1 : lcd_dat('-');
-                break;
-            case 0x0F : lcd_dat('?');
-                break;
-        }
-        /*if (!line_dn.sign)
-            {lcd_dat('+');}
-        else
-            {lcd_dat('-');}
-        */
-        lcd_dat(line_dn.dig_1 + '0');
-        lcd_dat(line_dn.dig_2 + '0');
+        lcd_dat(line_dn.sign);
+        lcd_dat(line_dn.dig_1);
+        lcd_dat(line_dn.dig_2);
         lcd_dat('.');
-        lcd_dat(line_dn.dig_3 + '0');
+        lcd_dat(line_dn.dig_3);
     }
 }
 
@@ -225,23 +198,10 @@ void Display (uint8_t line_qty)
 // выделяет цифры из трехзначного числа Number,
 // распределяет вывод целого и десятичного заначения по символам,
 // заполняет массив строк для индикации на LCD
-void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
+void Frame (uint8_t Dig1, uint8_t Dig2, uint8_t Dig3, uint8_t sign, uint8_t i, uint8_t n)
+//определяем строку LCD: i это № устр-в: 0,2,4... верхняя, 1,3,5... нижняя
 {
-    unsigned int j=0;
-    unsigned int Num1, Num2, Num3;
-    Num1=Num2=0;
-    while (Number >= 100)
-    {
-        Number -= 100;
-        Num1++;
-    }
-    while (Number >= 10)
-    {
-        Number -= 10;
-        Num2++;
-    }
-    Num3 = Number;
-    //определяем строку LCD: i это № устр-в: 0,2,4... верхняя, 1,3,5... нижняя
+    uint8_t j=0;
     if (!(i & 0x01))
     {
         while (j < 8)
@@ -249,20 +209,11 @@ void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
             line_up.name[j] = buffer.name[j];
             j++;
         }
-        if (buffer.flags)
-        {
-            line_up.dig_1 = Num1;
-            line_up.dig_2 = Num2;
-            line_up.dig_3 = Num3;
-            line_up.sign = temp_sign;
-        }
-        else
-        {
-            line_up.dig_1 = 0x0F; // при прибавлении кода символа "0" (d48)в функции Display() получим код символа "?" на дисплее вместо цифр
-            line_up.dig_2 = 0x0F;
-            line_up.dig_3 = 0x0F;
-            line_up.sign = 0x0F;
-        }
+        line_up.dig_1 = Dig1;
+        line_up.dig_2 = Dig2;
+        line_up.dig_3 = Dig3;
+        line_up.sign = sign;
+
         if (!(i & 0x01) && (i==(n-1))) //если строка верхняя, но последняя, сразу вывод на LCD
         {
             Display (0); // передаём в функцию вывода кол-во строк кадра: 0->1 строка, 1->2 строки
@@ -275,20 +226,11 @@ void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
             line_dn.name[j] = buffer.name[j];
             j++;
         }
-        if (buffer.flags)
-        {
-            line_dn.dig_1 = Num1;
-            line_dn.dig_2 = Num2;
-            line_dn.dig_3 = Num3;
-            line_dn.sign = temp_sign;
-        }
-        else
-        {
-            line_dn.dig_1 = 0x0F; // при прибавлении '0' (0d48) в функции Display() получим символ "?"
-            line_dn.dig_2 = 0x0F;
-            line_dn.dig_3 = 0x0F;
-            line_dn.sign = 0x0F;
-        }
+        line_dn.dig_1 = Dig1;
+        line_dn.dig_2 = Dig2;
+        line_dn.dig_3 = Dig3;
+        line_dn.sign = sign;
+
         Display (1);// передаём в функцию вывода кол-во строк кадра: 0->1 строка, 1->2 строки
     }
 }
@@ -655,14 +597,13 @@ uint8_t scratchpad_rd (void)
     else
         return 0;
 }
+
+
+
 //начало основой программы
 int main(void)
 {
-    unsigned char temperature[2];	// массив байтов температуры LB и HB
-    unsigned char temp_int; //целая часть температура
-    unsigned char temp_float; // дробная часть температуры
-    unsigned int temp; // временная переменная для перевода из дополнительного кода в прямой при "-" температуре
-    unsigned int n = 0;
+    uint8_t n = 0; // для количества записанных в епром устройств
     uint8_t srch_done = 0; // признак проведённой первичной дешифрации
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
@@ -735,77 +676,116 @@ int main(void)
 
     while(1)
     {
-        unsigned char j = 0;// переменные счетчики
-        unsigned char i = 0;
-        unsigned char n = 0;
+        unsigned char i, j, n = 0;// переменные счетчики
+        unsigned char temperature[2];	// массив байтов температуры LB и HB
+        unsigned char temp_int; //целая часть температура
+        unsigned char temp_float; // дробная часть температуры
+        unsigned int temp; // временная переменная для перевода из дополнительного кода в прямой при "-" температуре
+        unsigned char temp_sign; // признак знака температуры
+        uint16_t Number = 0; //сюда попадёт значение температуры
+        uint8_t Num1, Num2, Num3 = 0;//переменные для цифр температуры
+        uint8_t Dig_1, Dig_2, Dig_3, sign = 0;//переменные для кодов символов цифр температуры и символа знака
 
-        n = eeprom_read_byte((uint8_t*)dev_qty);
-        for (i = 0; i< n; i++) //начинаем с первого датчика (от 0)
+        n = eeprom_read_byte((uint8_t*)dev_qty); //читаем количество датчиков, записанных в епром
+        for (i = 0; i< n; i++) //начинаем опрос с первого датчика (от 0)
         {
             eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства из епром
-            init_device();//импульс сброса и присутствие
-            send_command(0x55);//команда соответствия
-            // после передадим код устройства к которому обращаемся
-            for (j = 0; j < 8 ; j++)
+            if (buffer.flags)//если флаг присутствия поднят, запрашиваем температуру
             {
-                //unsigned char data_byte; // переменная для передачи кода
-                //data_byte = buffer.code[j];
-                //send_command (data_byte); //передаем побайтово код устройства
-                send_command (buffer.code[j]);
-            }
-
-            send_command (0x44);//команда преобразования
-            while (!read_data()) ;// выполняется цикл пока на линии не установится 1 - преобразование закончено
-            init_device();//импульс сброса и присутствие
-            send_command(0x55);//команда соответствия
-            for (j = 0; j < 8 ; j++)   // опять передаем адресс устройства, к которому будем обращаться
-            {
-                //unsigned char data_byte; // переменная для передачи кода
-                //data_byte = buffer.code[j];
-                //send_command (data_byte); //передаем побайтово код устройства
-                send_command (buffer.code[j]);
-            }
-            send_command (0xBE);//команда чтение памяти
-            for (j = 0; j < 2; j++) //считываем первые два байта температуры
-            {
-                unsigned char i;//локальная переменная для внутреннего цикла
-                unsigned char data_temp = 0x00;
-                for (i = 0; i < 8; i++)
+                init_device();//импульс сброса и присутствие
+                send_command(0x55);//команда соответствия
+                // после передадим код устройства к которому обращаемся
+                for (j = 0; j < 8 ; j++)
                 {
-                    data_temp >>= 1;
-                    if (read_data()) //если 1, то устанавливаем  старший бит 1
-                        data_temp |= 0x80;
+                    //unsigned char data_byte; // переменная для передачи кода
+                    //data_byte = buffer.code[j];
+                    //send_command (data_byte); //передаем побайтово код устройства
+                    send_command (buffer.code[j]);
                 }
-                temperature[j] = data_temp;
+
+                send_command (0x44);//команда преобразования
+                while (!read_data()) ;// выполняется цикл пока на линии не установится 1 - преобразование закончено
+                init_device();//импульс сброса и присутствие
+                send_command(0x55);//команда соответствия
+                for (j = 0; j < 8 ; j++)   // опять передаем адресс устройства, к которому будем обращаться
+                {
+                    //unsigned char data_byte; // переменная для передачи кода
+                    //data_byte = buffer.code[j];
+                    //send_command (data_byte); //передаем побайтово код устройства
+                    send_command (buffer.code[j]);
+                }
+                send_command (0xBE);//команда чтение памяти
+                for (j = 0; j < 2; j++) //считываем первые два байта температуры
+                {
+                    unsigned char i;//локальная переменная для внутреннего цикла
+                    unsigned char data_temp = 0x00;
+                    for (i = 0; i < 8; i++)
+                    {
+                        data_temp >>= 1;
+                        if (read_data()) //если 1, то устанавливаем  старший бит 1
+                            data_temp |= 0x80;
+                    }
+                    temperature[j] = data_temp;
+                }
+                init_device();	// сброс датчиков для прекращения передачи данных
+                // преобразуем полученное в значение температуры
+                if ((temperature[1]&0b10000000) == 0) // проверка на отрицательность температуры
+                    temp_sign =0; //рисуем плюс на ЖКИ
+                else //переводим из доп.кода в прямой
+                {
+                    temp = ((unsigned int)temperature[1]<<8) | temperature[0];
+                    temp = ~temp + 1;
+                    temperature[0] = temp;
+                    temperature[1] = temp>>8;
+                    temp_sign = 1;  //рисуем минус на ЖКИ
+                }
+
+                temp_int = ((temperature[1]&0b00000111)<<4)|(temperature[0]>>4);	//выводим  целое знач. температуры
+                temp_float = (temperature[0]&0b00001111); //выделяем с помощью битовой маски дробную часть
+                /*
+                преобразуем в целое число и *10 (нужен только 1 десятичный знак),
+                десятичную "." будем ставить принудительно
+                1. temp_float = temp_float * 0.0625 -  просто умножаем на 0.0625 или
+                     (temp_float >> 4)  - делим на 16 сдвигами
+                2. (temp_float + temp_int)*10 - просто умножаем на 10 или
+                    ((((temp_float + temp_int)<<1) + (temp_float + temp_int)<<3)) - умножаем на 10 сдвигами
+                */
+                Number = ((uint16_t)((temp_float*0.0625 + temp_int)*10));//Явно приводим к uint8_t, чтобы уйти от float;
+                //преобразуем число в цифры, потом их в коды символов цифр
+                Num1 = Num2 = Num3 = Dig_1 = Dig_2 = Dig_3 = 0;
+                while (Number >= 100)
+                {
+                    Number -= 100;
+                    Num1++;
+                }
+                while (Number >= 10)
+                {
+                    Number -= 10;
+                    Num2++;
+                }
+                Num3 = Number;
+                Dig_1 = Num1 + '0';
+                Dig_2 = Num2 + '0';
+                Dig_3 = Num3 + '0';
+                switch (temp_sign)
+                {
+                    case 0 : sign = '+';
+                        break;
+                    case 1 : sign = '-';
+                        break;
+                }
             }
-            init_device();	// сброс датчиков для прекращения передачи данных
-            // преобразуем полученное в значение температуры
-            if ((temperature[1]&0b10000000) == 0) // проверка на отрицательность температуры
-                temp_sign =0; //рисуем плюс на ЖКИ
-            else //переводим из доп.кода в прямой
+            else  //если флаг присутствия сброшен, на дисплей шлём ???.?
             {
-                temp = ((unsigned int)temperature[1]<<8) | temperature[0];
-                temp = ~temp + 1;
-                temperature[0] = temp;
-                temperature[1] = temp>>8;
-                temp_sign = 1;  //рисуем минус на ЖКИ
+                Dig_1 = '?';
+                Dig_2 = '?';
+                Dig_3 = '?';
+                sign = '?';
             }
-
-            temp_int = ((temperature[1]&0b00000111)<<4)|(temperature[0]>>4);	//выводим  целое знач. температуры
-            temp_float = (temperature[0]&0b00001111); //выделяем с помощью битовой маски дробную часть
-            /*
-            преобразуем в целое число и *10 (нужен только 1 десятичный знак),
-            десятичную "." будем ставить принудительно
-            1. temp_float = temp_float * 0.0625 -  просто умножаем на 0.0625 или
-                 (temp_float >> 4)  - делим на 16 сдвигами
-            2. (temp_float + temp_int)*10 - просто умножаем на 10 или
-                ((((temp_float + temp_int)<<1) + (temp_float + temp_int)<<3)) - умножаем на 10 сдвигами
-            */
-
-            Disp_prep ((uint16_t)((temp_float*0.0625 + temp_int)*10), i, n); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ.№ строки диспл., кол-во строк
+            Frame (Dig_1, Dig_2, Dig_3, sign, i, n);  //передаём коды символов цифр и  знака, № устр-ва для определ.№ строки диспл., кол-во строк
             if ((i & 0x01)||(i == (n-1))) //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя;
                 //если строка нижняя - ставим задержку перед сменой экрана.
-                //Если строка верхняя, но устройство последнее - тоже задержка
+                //Если строка верхняя, но устройство последнее - тоже задержка для считывания экрана
             {
                 _delay_ms(2000);
             }
@@ -814,8 +794,3 @@ int main(void)
         }
     }	// закрывающая скобка бесконечного цикла
 }      // закрывающая скобка основной программы
-
-//сделать:
-// перевести temp_sign из глобальных в main
-//активировать проверку n<50 в дешифрации
-// упростить передачу кода в линию, возможно вывести в функцию
