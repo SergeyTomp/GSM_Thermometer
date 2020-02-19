@@ -1483,47 +1483,51 @@ uint8_t parser(void) // разбор текста msg
     uint8_t n = 0;			// число найденных +cmti:, их может быть несколько
     uint8_t  number[3];		// временный массив для порядкового номера смс
     uint8_t pars_res = 'Z';	// результат работы парсера
-    static uint8_t money[6];// массив для цифр баланса, static, чтобы можно было передать на него указатель
+    static uint8_t money[6];// массив для цифр баланса, static, чтобы можно было передать на него указатель в sms_buff
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 			// если в msg есть r/n/OKr/n:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 		// если в msg есть r/n/OKr/n:
     {
         mod_ans = OK;
         pars_res = 'O';
     }
-    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)		// если в msg есть r/n>:
+    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)	// если в msg есть r/n>:
     {
         mod_ans = INVITE;
         pars_res = 'I';
     }
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)			// если в msg есть r/n/+cmgr:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)		// если в msg есть r/n/+cmgr:
     {
-        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)				// если телефон правильный
+        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)			// если телефон правильный
         {
-            /* uint8_t q = 0;														// счётчик кавычек
-            while ((q < 7)&&(*txt_ptr != '\r'))									// ищем шестые кавычки, за ними будет текст смс, но не выходим за предел '\r'
+            txt_ptr += 8;													// смещаем указатель за +CMGR:_
+            uint8_t q = 0;													// счётчик кавычек
+            while ((q != 8)&&(*txt_ptr != '\r'))// ищем последние закрывающие (восьмые) кавычки, за ними будет текст смс
+            {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
+                if (*txt_ptr == '\"')										// если наткнулись на кавычки
+                {q += 1;}												// растим счётчик
+                txt_ptr += 1;												// указатель двигаем в любом случае
+            }
+            if (q == 8)														// только если насчитали 8 кавычек, иначе нафиг эту смс
             {
-                if (*txt_ptr == '\"') {q += 1;}
-                txt_ptr += 1;
-                if (q == 6)														// только если насчитали 6 кавычек, иначе нафиг эту смс
+                txt_ptr += 2;
+                for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
+                uint8_t j = 0;
+                while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
                 {
-                    for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
-                    uint8_t j = 0;
-                    while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
-                    {
-                        todo_txt[j] = *(txt_ptr + j);
-                        j++;
-                    }
+                    todo_txt[j] = *(txt_ptr + j);
+                    j++;
                 }
-            } */
-            for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		 	// очистка массива задания контроллеру
+                to_do(); 													// вызываем функцию распознавания команды
+            }
+            /* for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		// очистка массива задания контроллеру
             uint8_t j = 0;
-            while (((*(txt_ptr + 64 + j)) != '\r') && (j < TODO_MAX))			// копируем текст команды контроллеру из смс
+            while (((*(txt_ptr + 64 + j)) != '\r') && (j < TODO_MAX))		// копируем текст команды контроллеру из смс
             {
                 todo_txt[j] = *(txt_ptr + 64 + j);
                 j++;
             }
-            to_do(); 		// вызываем функцию распознавания команды
+            to_do(); 														// вызываем функцию распознавания команды */
             pars_res = 'R';
         }
     }
@@ -1551,7 +1555,7 @@ uint8_t parser(void) // разбор текста msg
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CUSD))!= NULL) 	// если в строке есть \r\n+CUSD:_
     {
         txt_ptr = txt_ptr + 11;
-        while (!((isdigit(*txt_ptr))||(*txt_ptr == '-')))// ищем цифровые символы или '-' после "r/n/+CUSD:_0,"
+        while (!((isdigit(*txt_ptr))||(*txt_ptr == '-')))					// ищем цифровые символы или '-' после "r/n/+CUSD:_0,"
         {
             txt_ptr++;
         }
