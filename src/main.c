@@ -159,19 +159,22 @@ unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
 unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
 unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
 unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
-unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,\"";	// USSD запрос баланса с открывающими кавычками номера телефона
+unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса с открывающими кавычками номера телефона
 //unsigned char TEXT_100[]		PROGMEM = "#100#\"";		// номер баланса, пока здесь
 unsigned char ANS_CUSD[]		PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
 unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
 unsigned char ANS_COPS[]		PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
 unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
 unsigned char ANS_CPBF[]		PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
-unsigned char USER_0[]			PROGMEM = "\"user_0\"";		// имя админа с открывающими и закрывающими кавычками
-unsigned char USER_1[]			PROGMEM = "\"user_1\"";		// имя пользователя с открывающими и закрывающими кавычками
-unsigned char BALANS[]			PROGMEM = "\"balans\"";		// текст balans с открывающими и закрывающими кавычками
-unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=,\"";	// запрос на запись в сим в свободную ячейку с открывающими кавычками номера телефона
-unsigned char TEXT_145[]		PROGMEM = "\",145,";		// часть запроса на запись телефона в сим с закрывающими кавычками номера
-unsigned char TEXT_129[]		PROGMEM = "\",129,";		// часть запроса на запись кода баланса с закрывающими кавычками кода
+unsigned char USER_0[]			PROGMEM = "USER_0";			// имя админа с открывающими и закрывающими кавычками
+unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя с открывающими и закрывающими кавычками
+unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans с открывающими и закрывающими кавычками
+unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку с открывающими кавычками номера телефона
+unsigned char CELL_1[]			PROGMEM = "1,\"";			// запрос на запись в сим в ячейку 1 с открывающими кавычками номера телефона
+unsigned char CELL_2[]			PROGMEM = "2,\"";			// запрос на запись в сим в ячейку 2 с открывающими кавычками номера телефона
+unsigned char CELL_3[]			PROGMEM = "3,\"";			// запрос на запись в сим в ячейку 3 с открывающими кавычками номера телефона
+unsigned char TEXT_145[]		PROGMEM = "\",145,\"";		// часть запроса на запись телефона в сим с закрывающими кавычками номера
+unsigned char TEXT_129[]		PROGMEM = "\",129,\"";		// часть запроса на запись кода баланса с закрывающими кавычками кода
 
 
 // блок глобальных переменных и структур
@@ -282,14 +285,17 @@ typedef struct //структура задачи отправки команд в модем, 5 байт
 {
     tracker step;						// Флаги процесса
     uint8_t* cmd;						// указатель на AT-команду
-    uint8_t* ram_par;					// указатель на параметр AT-команды из озу
     uint8_t* pgm_par_1;					// указатель на параметр AT-команды из флэш
     uint8_t* pgm_par_2;					// указатель на параметр AT-команды из флэш
+    uint8_t* ram_par;					// указатель на параметр AT-команды из озу
+    uint8_t* pgm_par_3;					// указатель на параметр AT-команды из флэш
+    uint8_t* pgm_par_4;					// указатель на параметр AT-команды из флэш
+    uint8_t* pgm_par_5;					// указатель на параметр AT-команды из флэш
 }cmd_task;
 
 struct tel_list							// структура массивов телефонов пользователей и USSD-запросов
 {
-    uint8_t balance [7];				// для USSD-запроса баланса
+    uint8_t balance [6];				// для USSD-запроса баланса
     uint8_t phone_0 [13];				// администратор
     uint8_t phone_1 [13];				// обычный пользователь без прав изменений
     uint8_t reserv [4];					// резервный для временной записи кода баланса в 12-ти значном виде
@@ -311,7 +317,7 @@ enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
 enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
     SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, USER, MEMBERS};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
-struct tel_list phones = {	{'#','0','0','0','#','\"','\0',},
+struct tel_list phones = {	{'#','0','0','0','#','\0',},
                               {'+','0','0','0','0','0','0','0','0','0','0','0','\0'},
                               {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
                               {'0','0','0','\0'}};	// структура с телефонами
@@ -340,7 +346,7 @@ uint8_t parser(void);										//объявляем HANDLER разбора текста
 uint8_t send_cmd (void);									//объявляем HANDLER отправки команды в модем
 void inc_to_queue(uint8_t*);								//объявляем функцию постановки в очередь задачи чтения смс
 void out_to_queue(sms_mask*);								//объявляем функцию постановки в очередь задачи отправки смс
-void cmd_to_queue(uint8_t*, uint8_t*, uint8_t*, uint8_t*);	//объявляем функцию постановки в очередь задачи отправки команды в модем
+void cmd_to_queue(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*);	//объявляем функцию постановки в очередь задачи отправки команды
 void to_do(void);											//объявляем функцию разбора и выполнения команд из текста смс
 
 // Функция записи команды в ЖКИ
@@ -1154,17 +1160,25 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
     if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
     {
         string_to_TX_Ring (WR_CMD[cmd_task_T].cmd);
-        if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
-        {
-            arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
-        }
         if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_1);				//добавляем текст команды из флэш
         }
-        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
+        if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
+        {
+            arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_3 команды из флэш не пустой
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_3 != NULL)							//если параметр_4 команды из флэш не пустой
+        {
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_3);				//добавляем текст команды из флэш
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_4 != NULL)							//если параметр_5 команды из флэш не пустой
+        {
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_4);				//добавляем текст команды из флэш
         }
         string_to_TX_Ring (CRLF);
         ans_lim = 180;								//установка времени ожидания ответа
@@ -1569,8 +1583,8 @@ uint8_t parser(void) // разбор текста msg
             {
                 phones.phone_0[i] = txt_ptr[25 + i];
             }
-            cmd_to_queue (AT_CPBW, phones.phone_0, TEXT_145, USER_0);	//записываем этот телефон на сим
-            sms_buff.sms_type = ADMIN;									// отправляем подтверждение отправителю
+            cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
+            sms_buff.sms_type = ADMIN;										// отправляем подтверждение отправителю
             out_to_queue (&sms_buff);
         }
     }
@@ -1655,7 +1669,7 @@ uint8_t parser(void) // разбор текста msg
             {
                 phones.phone_0[i] = *(txt_ptr + i);
             }
-            cmd_to_queue (AT_CPBF, NULL, NULL, USER_1);						// запрос поиска номера рядового пользователя
+            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_1, QUOTES);						// запрос поиска номера рядового пользователя
         }
         else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_1)) != NULL)	// если в тексте ответа модема user_1, копируем телефон в массив пользователя
         {
@@ -1754,14 +1768,16 @@ void out_to_queue (sms_mask *str)	//постановка в очередь задачи отправки смс
     }
 }
 
-void cmd_to_queue (uint8_t *cmd, uint8_t *ram_par, uint8_t *pgm_par_1, uint8_t *pgm_par_2)	//постановка в очередь задачи отправки команды
+void cmd_to_queue (uint8_t *cmd, uint8_t *pgm_par_1, uint8_t *ram_par, uint8_t *pgm_par_2, uint8_t *pgm_par_3, uint8_t *pgm_par_4)	//постановка в очередь задачи отправки команды
 {
     if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((cmd_task_H + 1) & CMD_TASK_IND_MSK) != cmd_task_T)) 	//если голова не догнала хвост
     {
         WR_CMD[cmd_task_H].cmd = cmd;									//записываем указатель на текст команды в задачу
-        WR_CMD[cmd_task_H].ram_par = ram_par;							//записываем указатель на озу-параметр команды в задачу
         WR_CMD[cmd_task_H].pgm_par_1 = pgm_par_1;						//записываем указатель1 на флэш-параметр команды в задачу
-        WR_CMD[cmd_task_H].pgm_par_2 = pgm_par_2;						//записываем указатель2 на флэш-параметр команды в задачу
+        WR_CMD[cmd_task_H].ram_par = ram_par;							//записываем указатель на озу-параметр команды в задачу
+        WR_CMD[cmd_task_H].pgm_par_2 = pgm_par_2;						//записываем указатель1 на флэш-параметр команды в задачу
+        WR_CMD[cmd_task_H].pgm_par_3 = pgm_par_3;						//записываем указатель2 на флэш-параметр команды в задачу
+        WR_CMD[cmd_task_H].pgm_par_4 = pgm_par_4;						//записываем указатель2 на флэш-параметр команды в задачу
         //обнуляем флаги процесса
         WR_CMD[cmd_task_H].step.flag_1 = WR_CMD[cmd_task_H].step.flag_2 = WR_CMD[cmd_task_H].step.flag_3 = WR_CMD[cmd_task_H].step.flag_4
                 = WR_CMD[cmd_task_H].step.flag_5 = WR_CMD[cmd_task_H].step.flag_6 = WR_CMD[cmd_task_H].step.flag_7 = WR_CMD[cmd_task_H].step.flag_8 = 0;
@@ -1984,8 +2000,8 @@ void to_do (void)			// модуль разбора и выполнения команды
             }
             if (j == 12)								// если записан + и 12 цифр
             {
-                cmd_to_queue (AT_CPBW, phones.phone_0, TEXT_145, USER_0);		// записываем этот телефон на сим
-                sms_buff.sms_type = ADMIN;										// отправляем подтверждение админу
+                cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	// записываем этот телефон на сим
+                sms_buff.sms_type = ADMIN;													// отправляем подтверждение админу
                 out_to_queue (&sms_buff);
             }
 
@@ -2013,7 +2029,7 @@ void to_do (void)			// модуль разбора и выполнения команды
             }
             if (j == 12)													// если записан + и 12 цифр
             {
-                cmd_to_queue (AT_CPBW, phones.phone_1, TEXT_145, USER_1);	//записываем этот телефон на сим
+                cmd_to_queue (AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);	//записываем этот телефон на сим
                 sms_buff.sms_type = USER;									// отправляем подтверждение админу
                 out_to_queue (&sms_buff);
             }
@@ -2044,8 +2060,7 @@ void to_do (void)			// модуль разбора и выполнения команды
             }
             if (i == 3)													// если получилось три цифры, всё ок
             {
-                cmd_to_queue (AT_CPBW, phones.reserv, TEXT_129, BALANS);// отправляем в сим условный номер баланса
-                cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);     // запрос баланса в качестве проверки правильности цифр от админа
+                cmd_to_queue (AT_CPBW, CELL_1, phones.reserv, TEXT_129, BALANS, QUOTES);// отправляем в сим условный номер баланса
             }
             else														// если не получилось три цифры, неверная команда
             {
@@ -2053,18 +2068,19 @@ void to_do (void)			// модуль разбора и выполнения команды
                 out_to_queue (&sms_buff);
             }
         }
-        else															// если после BALANCE и пробела не *, не # и не цифра
-        {
-            cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);         // значит просто команда на запрос баланса
-        }
+        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
     }
 
     else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)	// если в todo_txt есть DELETE
     {
-        if (strstr((const char*)todo_txt, (char*)phones.phone_1))					// если номер из смс номер есть в массиве
+        txt_ptr = txt_ptr + 5;
+        if (strstr((const char*)txt_ptr, (char*)phones.phone_1))					// если номер из смс номер есть в массиве
         {
             for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
             {phones.phone_1[i] = '0';}
+            cmd_to_queue(AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);// писшем в сим телефон с нулями
+            sms_buff.sms_type = MEMBERS;
+            out_to_queue(&sms_buff);												// отправляем обновлённый список юзеров
         }
     }
 
@@ -2656,10 +2672,10 @@ int main (void)
     TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;// Сбросить к/буферы приёмника и передатчика
     msg_clr();									// очистка msg
     ans_cnt = 0;								// запуск таймера ожидания ответа модема после включения/сброса
-    cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);// добавляем в стартовый список команд "удалить все смс"
-    cmd_to_queue (AT_CPBF, NULL, USER_0, NULL);	// добавляем в стартовый список команд запрос поиска номера админа
-    cmd_to_queue (AT_CPBF, NULL, BALANS, NULL);	// добавляем в стартовый список команд запрос поиска номера баланса
-    cmd_to_queue (AT_COPS, NULL, NULL, NULL);	// добавляем в стартовый список команд запрос оператора для определения кода баланса
+    cmd_to_queue (AT_CMGD, TEXT_1_4, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд "удалить все смс"
+    cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_0, QUOTES);	// добавляем в стартовый список команд запрос поиска номера админа
+    cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, BALANS, QUOTES);	// добавляем в стартовый список команд запрос поиска номера баланса
+    cmd_to_queue (AT_COPS, NULL, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд запрос оператора для определения кода баланса
 
     sei();										// глобально разрешаем прерывания
 
@@ -3049,7 +3065,7 @@ int main (void)
 
             if (gsm_lvl_req)							//если в прерывании установился флаг отправки запроса уровня
             {
-                cmd_to_queue (AT_CSQ, NULL, NULL, NULL);//ставим задачу
+                cmd_to_queue (AT_CSQ, NULL, NULL, NULL, NULL, NULL);//ставим задачу
                 gsm_lvl_req = 0;						//обнуляем флаг
                 time_gsm = 0;							//запускаем таймер запросов уровня gsm в прерывании
             }
