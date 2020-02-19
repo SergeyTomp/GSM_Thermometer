@@ -22,50 +22,27 @@
 #define bit_msk 0x01 // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
 // #define D 2 //максимальное количество датчиков, которое может быть подключено.
 
-const unsigned char tempC[] PROGMEM = "Темп-ра ";
-const unsigned char absence[] PROGMEM = "Нет датчиков";
-const unsigned char error[] PROGMEM = "ошибка иниц.";
-const unsigned char present_n[] PROGMEM = "Подкл.дат. ";
-const unsigned char init_n[] PROGMEM = "Иниц.дат. ";
-const unsigned char no_answer[] PROGMEM = "Нет ответа датч. ";
-//char buffer [20];
+//unsigned char tempC[] PROGMEM = "Темп-ра ";
+unsigned char absence[] PROGMEM = "Нет датчиков";
+unsigned char error[] PROGMEM = "ошибка иниц.";
+unsigned char present_n[] PROGMEM = "Подкл.дат. ";
+unsigned char init_n[] PROGMEM = "Иниц.дат. ";
+unsigned char no_answer[] PROGMEM = "Нет ответа датч. ";
 unsigned char temp_sign; // признак знака температуры для ф-ции вывода на ЖКИ
+
 typedef struct
 {
-    char name[8]; // имя 1W устройства
-    uint8_t code[8]; // код 1W устройства
-    int8_t tmax; // максимальная Т
-    int8_t tmin; // минимальная Т
+    unsigned char name[8]; // имя 1W устройства
+    unsigned char code[8]; // код 1W устройства
+    char tmax; // максимальная Т
+    char tmin; // минимальная Т
 } device; // структура для параметров 1W устройства
 
 device buffer; // переменная для обмена озу <-> епром
 device ee_arr [2] EEMEM; // oбъявляем массив структур в епром, 2 - пока временно, для начала
-char *location; //переменная для имени 1W устройств - задаётся юзером вместо имени по умолчанию
-uint8_t dev_num = 0x00; //переменная порядкового номера для добавления к имени 1W устройств по умолчанию,
-char dev_name[8] = {'D', ' ', ' '}; //"D__" - имя устройства по умолчанию, к нему добавится ASCII код порядкового номера
-
-//Таблица перекодировки в русские символы.
-static const unsigned char convert_HD44780[64]PROGMEM =
-        {
-                0x41,0xA0,0x42,0xA1,0xE0,0x45,0xA3,0xA4,
-                0xA5,0xA6,0x4B,0xA7,0x4D,0x48,0x4F,0xA8,
-                0x50,0x43,0x54,0xA9,0xAA,0x58,0xE1,0xAB,
-                0xAC,0xE2,0xAD,0xAE,0xAD,0xAF,0xB0,0xB1,
-                0x61,0xB2,0xB3,0xB4,0xE3,0x65,0xB6,0xB7,
-                0xB8,0xB9,0xBA,0xBB,0xBC,0xBD,0x6F,0xBE,
-                0x70,0x63,0xBF,0x79,0xE4,0x78,0xE5,0xC0,
-                0xC1,0xE6,0xC2,0xC3,0xC4,0xC5,0xC6,0xC7
-        };
-// функция перекодировки символов
-static uint8_t lcd_rus(uint8_t c)
-{
-    if  (c > 191)
-    {
-        c -= 192;
-        c = pgm_read_byte (&(convert_HD44780[c]));
-    }
-    return c;
-}
+unsigned char *location; //переменная для имени 1W устройств - задаётся юзером вместо имени по умолчанию
+unsigned char dev_num = 0x00; //переменная порядкового номера для добавления к имени 1W устройств по умолчанию,
+unsigned char dev_name[8] = {'D', 'x', 'x', 'x', 'x', 'x', 'x', 'x'}; //"D__" - имя устройства по умолчанию, к нему добавится ASCII код порядкового номера
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -101,12 +78,46 @@ void lcd_dat(unsigned char p)
     _delay_us(50);
 }
 
+//Таблица перекодировки в русские символы.
+static const unsigned char convert_HD44780[64]PROGMEM =
+        {
+                0x41,0xA0,0x42,0xA1,0xE0,0x45,0xA3,0xA4,
+                0xA5,0xA6,0x4B,0xA7,0x4D,0x48,0x4F,0xA8,
+                0x50,0x43,0x54,0xA9,0xAA,0x58,0xE1,0xAB,
+                0xAC,0xE2,0xAD,0xAE,0xAD,0xAF,0xB0,0xB1,
+                0x61,0xB2,0xB3,0xB4,0xE3,0x65,0xB6,0xB7,
+                0xB8,0xB9,0xBA,0xBB,0xBC,0xBD,0x6F,0xBE,
+                0x70,0x63,0xBF,0x79,0xE4,0x78,0xE5,0xC0,
+                0xC1,0xE6,0xC2,0xC3,0xC4,0xC5,0xC6,0xC7
+        };
+
+// функция перекодировки символов
+static unsigned char lcd_rus(uint8_t c)
+{
+    if  (c > 191)
+    {
+        c -= 192;
+        c = pgm_read_byte (&(convert_HD44780[c]));
+    }
+    return c;
+}
+
 // функция вывода строки на ЖКИ
 void send_string_to_LCD (const unsigned char *s)
 {
     while(pgm_read_byte (s))
     {
         lcd_dat(lcd_rus(pgm_read_byte(s++)));
+        _delay_ms (1);
+    }
+}
+
+// функция вывода массива символов на ЖКИ (в массиве должен быть символ "конца строки" 0x00)
+void send_arr_to_LCD (unsigned char *s)
+{
+    while(*s)
+    {
+        lcd_dat(lcd_rus (*s++));
         _delay_ms (1);
     }
 }
@@ -125,7 +136,7 @@ void lcd_init(void)
 }
 
 // Функция выделяет цифры из трехзначного числа Number, и распределяет вывод целого или плавающего заначения
-void Display (unsigned int Number)
+void Display (unsigned int Number, uint8_t i)
 {
 
     short unsigned int Num1, Num2, Num3;
@@ -141,7 +152,15 @@ void Display (unsigned int Number)
         Num2++;
     }
     Num3 = Number;
-    lcd_com(0x88); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+    i &= 0x01; //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя
+    if (!i) //если строка верхняя - чистим дисплей
+    {
+        lcd_com(0x01); // очистка дисплея
+        _delay_us(1500);// время выполнения очистки не менее 1.5ms
+    }
+    lcd_com(0x80 + (i*0x40)); // выводим строку в 1-ю верхнюю левую позицию 1 или 2 строки экрана
+    send_arr_to_LCD (buffer.name); //выводим имя устройства
+    lcd_com(0x88 + (i*0x40)); // выводим температуру в 8-ю (от 0) позицию 1ю или 2ю строки экрана
     if (!temp_sign)
     {lcd_dat('+');}
     else
@@ -347,8 +366,9 @@ int main(void)
             p = 1;
 
             location = dev_name;//временно локации устройства присваивается ASCII код имени по умолчанию
-            utoa (dev_num, &dev_name[1], 10);// в имя по умолчанию добавляется ASCII код номера устройства по порядку поиска
-            strncpy(buffer.name, location, sizeof buffer.name); // записываем ASCII код имени в поле name буфера
+            utoa (dev_num, (void*)&dev_name[3], 10);// в имя по умолчанию добавляется ASCII код номера устройства по порядку поиска
+            //приходится использовать явное приведение к void*, т.к. utoa и strncpy не жрут ничего, кроме char*, а у нас unsigned char*
+            strncpy((void*)buffer.name, (void*)location, sizeof buffer.name); // записываем ASCII код имени в поле name буфера
 
             // запись ID-кода 1-го 1W устройства в ID_string и копирование его в буфер-структуру
             for (j=0; j < 8; j++)
@@ -419,20 +439,20 @@ int main(void)
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
     send_string_to_LCD (init_n); //выводим "Иниц.дат."
-    lcd_dat(i+'0');
+    lcd_dat(i+'0');//выводим кол-во устр-в, прошедших проверку CRC8
     _delay_ms(3000);
     lcd_com(0x01); // очистка дисплея
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
-    lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
-    send_string_to_LCD (tempC); //выводим "Темп-ра "
+    //lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+    //send_string_to_LCD (tempC); //выводим "Темп-ра "
 
     while(1)
     {
-        for (i = 0; i< n; i++) //начинаем с первого датчика
+        for (i = 0; i< n; i++) //начинаем с первого датчика (от 0)
         {
             eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства их епром
             init_device();//импульс сброса и присутствие
-            send_command(0x55);//комманда соответствия
+            send_command(0x55);//команда соответствия
             // после передадим код устройства к которому обращаемся
             for (j = 0; j < 8 ; j++)
             {
@@ -441,17 +461,17 @@ int main(void)
                 send_command (data_byte); //передаем побайтово код устройства
             }
 
-            send_command (0x44);//комманда преобразования
+            send_command (0x44);//команда преобразования
             while (!read_data()) ;// выполняется цикл пока на линии не установится 1 - преобразование закончено
             init_device();//импульс сброса и присутствие
-            send_command(0x55);//комманда соответствия
+            send_command(0x55);//команда соответствия
             for (j = 0; j < 8 ; j++)   // опять передаем адресс устройства, к которому будем обращаться
             {
                 unsigned char data_byte; // переменная для передачи кода
                 data_byte = buffer.code[j];
                 send_command (data_byte); //передаем побайтово код устройства
             }
-            send_command (0xBE);//комманда чтение памяти
+            send_command (0xBE);//команда чтение памяти
             for (j = 0; j < 2; j++) //считываем первые два байта температуры
             {
                 unsigned char i;//локальная переменная для внутреннего цикла
@@ -521,8 +541,13 @@ int main(void)
 				((((temp_float + temp_int)<<1) + (temp_float + temp_int)<<3)) - умножаем на 10 сдвигами
 			*/
 
-            Display(((uint8_t)(temp_float*0.0625) + temp_int)*10);	// Явно приводим к uint8_t, чтобы уйти от float
-            _delay_ms(2000);
+            Display ((((uint8_t)(temp_float*0.0625) + temp_int)*10), i); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ. строки дисп.
+            if ((i & 0x01)||(i == (n-1))) //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя;
+                //если строка нижняя - ставим задержку перед сменой экрана.
+                //Если строка верхняя, но устройство последнее - тоже задержка
+            {
+                _delay_ms(2000);
+            }
             temp_int = 0;
             temp_float = 0;
         }
