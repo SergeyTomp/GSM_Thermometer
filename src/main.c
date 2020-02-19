@@ -52,7 +52,7 @@
 
 //блок define для GSM
 #define MYUBRR 103 // скорость usart 9600
-#define RING_SIZE 256 // размер буфера берём 256, чтобы пока обойтись без маски при переходе через 255->0
+#define RX_RING_SIZE 256 // размер буфера берём 256, чтобы пока обойтись без маски при переходе через 255->0
 
 // блок текстовых сообщений во флэш
 unsigned char absence[] PROGMEM = "Нет датчиков"; //ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
@@ -94,6 +94,8 @@ unsigned char on []PROGMEM = "ВКЛ.";
 unsigned char off []PROGMEM = "ОТК.";
 unsigned char blank []PROGMEM = " ";
 unsigned char crash []PROGMEM = "АВАРИЯ!";
+unsigned char frame_err []PROGMEM = "Ошибка приёма!";
+unsigned char rx_ring_ovf []PROGMEM = "К/буфер полный!";
 
 // блок глобальных переменных и структур
 typedef struct //битовое поле для флагов
@@ -135,9 +137,9 @@ const uint16_t dev_last_n = (EEP_MEM - 2);//константа, содержащая значение адрес
 //нужно для корректного продолжения автоматической нумерации в именах при добавлении в интерактивном режиме после удаления устройств через меню интерактивного удаления
 const uint8_t n_max = (uint8_t)((EEP_MEM - 2) / sizeof(device)); //максимально допустимое количество усройств в епром
 uint8_t scratchpad [9]; //массив байтов, прочитанных из блокнота DS18B20
-volatile uint8_t IndexIN;// входящий индекс кольцевого буфера, здесь обязательно volatile, меняется только в прерывании
-volatile uint8_t IndexOUT; // выходящий индекс кольцевого буфера
-volatile uint8_t ring[RING_SIZE]; //массив для кольцевого буфера
+volatile uint8_t RX_IndexIN;// входящий индекс кольцевого буфера, здесь обязательно volatile, меняется только в прерывании
+volatile uint8_t RX_IndexOUT; // выходящий индекс кольцевого буфера
+volatile uint8_t RX_ring[RX_RING_SIZE]; //массив для кольцевого буфера
 volatile uint8_t flash_cnt; //счётчик прерываний для индикации уровня gsm вспышками диода
 volatile uint8_t flash_num; //число прошедших вспышек
 volatile uint8_t pause_num; //число прошедших отрезков пауз между сериями вспышек
@@ -1014,43 +1016,49 @@ void add_ID(void) // режим удаления/добавления/вставки устройств
 void ClearRing(void)
 {
     cli();
-    IndexIN = 0;
-    IndexOUT = 0;
+    RX_IndexIN = 0;
+    RX_IndexOUT = 0;
     sei();
 }
 
 // Функция возвращает количество непрочитанных байт в кольцевом буфере
-uint8_t IndexNumber(void)
+uint8_t RX_IndexNumber(void)
 {
-    if (IndexIN >= IndexOUT)
+    if (RX_IndexIN >= RX_IndexOUT)
     {
-        return (IndexIN - IndexOUT);
+        return (RX_IndexIN - RX_IndexOUT);
     }
     else
     {
-        return ((RING_SIZE - IndexOUT) + IndexIN);
+        return ((RX_RING_SIZE - RX_IndexOUT) + RX_IndexIN);
     }
 }
 
 // Функция загрузки байта данных в кольцевой буфер
-uint8_t UDR_to_Ring(char value)
+uint8_t UDR_to_RX_Ring(char value)
 {
-    if((UCSR0A & (1 << FE0))) return 1;   // Ошибка кадрирования
-    IndexIN++;
-    if(IndexIN == IndexOUT) return 2; // Переполнение буфера
-    //IndexIN &= BUFFER_MASK;
-    ring[IndexIN] = value;
-    return 0;
+    if((UCSR0A & (1 << FE0)))
+        return 1;   // Ошибка кадрирования, не пишем новые данные
+    else
+        RX_IndexIN++;
+    //RX_IndexIN &= BUFFER_MASK;
+    if(RX_IndexIN == RX_IndexOUT)
+        return 2; // Переполнение буфера, не пишем новые данные
+    else
+    {
+        RX_ring[RX_IndexIN] = value;
+        return 0;
+    }
 }
 
 // Функция выгрузки строки данных из кольцевого буфера
-void Ring_to_Str(uint8_t *str, uint8_t lenght)
+void RX_Ring_to_Str(uint8_t *str, uint8_t lenght)
 {
     for(uint8_t i=0; i<lenght; i++)
     {
-        IndexOUT++;
-        //IndexOUT &= BUFFER_MASK;
-        *str = ring[IndexOUT];
+        RX_IndexOUT++;
+        //RX_IndexOUT &= BUFFER_MASK;
+        *str = RX_ring[RX_IndexOUT];
         str++;
     }
 }
@@ -1058,7 +1066,7 @@ void Ring_to_Str(uint8_t *str, uint8_t lenght)
 // наличие не прочитанных данных в кольцевом буфере
 uint8_t GetData(void)
 {
-    if(IndexIN != IndexOUT) return 1;
+    if(RX_IndexIN != RX_IndexOUT) return 1;
     return 0;
 }
 
@@ -1095,17 +1103,25 @@ ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
     //time_gsm++; //счётчик интервалов 30c запросов GSM, сбрасываается в main
 }
 
-ISR(USART_RX_vect) // Обработчик прерывания по приходу данных в UDR0
+void USART_Init( unsigned int ubrr)
 {
-    uint8_t temp = UDR0;
-    //if(!(temp == 0x0A || temp == 0x0D))
-    UDR_to_Ring(temp);
+    UBRR0H = (uint8_t)(ubrr >> 8); //скорость 9600
+    UBRR0L = (uint8_t)ubrr; //скорость 9600
+    UCSR0A = 0; //обнуляем флаги
+    UCSR0B = (1 << RXEN0)|(1 << TXEN0)|(1 << RXCIE0); //включаем передачу, приём и прерывания по приёму
+    UCSR0C = (1 << UCSZ01)|(1 << UCSZ00)|(1 << USBS0); //8 бит, 1 стоп бит
 }
 
 void USART_TXD(uint8_t data) // Передача байта по UART
 {
     while (!( UCSR0A & (1 << UDRE0))) {;} // Ждем пока не отправятся предыдущие данные
     UDR0 = data;	// Отпраляем текущие данные
+}
+
+void USART_CRLF(void) //передача CR и LF
+{
+    USART_TXD('\r');
+    USART_TXD('\n');
 }
 
 void arr_to_USART(uint8_t *s ) // Передача массива по UART
@@ -1116,7 +1132,7 @@ void arr_to_USART(uint8_t *s ) // Передача массива по UART
     }
 }
 
-void string_to_USART(uint8_t *s ) // Передача сроки из флэш по UART
+void string_to_USART(const uint8_t *s ) // Передача сроки из флэш по UART
 {
     while(pgm_read_byte(s))
     {
@@ -1124,13 +1140,29 @@ void string_to_USART(uint8_t *s ) // Передача сроки из флэш по UART
     }
 }
 
-void USART_Init( unsigned int ubrr)
+ISR(USART_RX_vect) // Обработчик прерывания по приходу данных в UDR0
 {
-    UBRR0H = (uint8_t)(ubrr >> 8); //скорость 9600
-    UBRR0L = (uint8_t)ubrr; //скорость 9600
-    UCSR0A = 0; //обнуляем флаги
-    UCSR0B = (1 << RXEN0)|(1 << TXEN0)|(1 << RXCIE0); //включаем передачу, приём и прерывания по приёму
-    UCSR0C = (1 << UCSZ01)|(1 << UCSZ00)|(1 << USBS0); //8 бит, 1 стоп бит
+    uint8_t temp;
+    //uint8_t wr_err = 0; //код успешности записи в кольцо
+    temp = UDR0;
+    //if(!(temp == 0x0A || temp == 0x0D))
+    UDR_to_RX_Ring(temp);
+
+/*
+	if(wr_err == 1) //при ошибке кадра выводим сообщение
+	{
+		send_string_to_LCD_XY(frame_err, 0, 0);
+		string_to_USART (frame_err);
+		_delay_ms(1500);
+	}
+	wr_err = UDR_to_RX_Ring(temp);// запрашиваем запись в кольцо и принимаем код успешности
+	if(wr_err == 2); //при ошибке переполнения кольца выводим сообщение
+	{
+		send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
+		string_to_USART (rx_ring_ovf);
+		_delay_ms(1500);
+	}
+	*/
 }
 
 //начало основой программы
@@ -1441,8 +1473,8 @@ int main(void)
                     {
                         _delay_ms(100); //чтобы долетели остатки посылки
                         lcd_clr(); // очистка дисплея
-                        uint16_t num = IndexNumber(); //сколько байт в кольцевом буфере
-                        Ring_to_Str(tmp, num); //выгружаем из кольца в tmp
+                        uint8_t num = RX_IndexNumber(); //сколько байт в кольцевом буфере
+                        RX_Ring_to_Str(tmp, num); //выгружаем из кольца в tmp
                         lcd_clr();
                         for(j=0; j < (num-1); j++) //выводим принятую команду на lcd
                         {lcd_dat_XY(tmp[j], j, 0);}
@@ -1609,15 +1641,15 @@ int main(void)
                         }
                         else if ((tmp[0]=='A')&&(tmp[1]=='L')&&(tmp[2]=='L')&&(tmp[3]==' ')&&(tmp[4]=='T'))
                         {
-                            UCSR0B &= ~(1 << RXEN0); //запрет приёма
-                            for (j=0; j<n; j++)
+                            for (i=0; i<n; i++)
                             {
+                                eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                                arr_to_USART (buffer.name);
+                                string_to_USART(blank);
                                 USART_TXD(((last_t[j] & 0b10000000) ? '-' : '+'));
-                                arr_to_USART(utoa_fast_div (((last_t[j] & 0b10000000) ? ((~last_t[j]) + 1) : last_t[j]), digits));
-                                USART_TXD('\r');
-                                USART_TXD('\n');
+                                arr_to_USART(utoa_fast_div (((last_t[i] & 0b10000000) ? ((~last_t[i]) + 1) : last_t[i]), digits));
+                                USART_CRLF();
                             }
-                            UCSR0B |= (1 << RXEN0); //разрешение приёма по факту прихода данных в UDR0
                         }
                         else
                         {
