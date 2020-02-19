@@ -9,49 +9,49 @@
 
 //#define DEBUG
 //блок define для LCD
-#define RS PORTD3						// Номер вывода порта, по которому передаётся команда RS в ЖКИ
-#define EN PORTD2						// Номер вывода порта, по которому передаётся команда EN в ЖКИ
-#define LCD_COM_PORT PORTD				// Порт для посыла команд в ЖКИ (команды и данные - могут быть не на одном порту!!!)
-//#define LCD_COM_PORT_DDR DDRD 		// Регистр направления данных в порту, куда подцеплены линии команд ЖКИ, см.выше
-#define LCD_DAT_PORT PORTD				// Порт отправки данных (и команд в данном случае)в ЖКИ
-#define LCD_DAT_PORT_DDR DDRD			// Регистр направления данных порта, куда подцеплен ЖКИ линиями данных (и команд в данном случае)
+#define RS					PORTD3		// Номер вывода порта, по которому передаётся команда RS в ЖКИ
+#define EN					PORTD2		// Номер вывода порта, по которому передаётся команда EN в ЖКИ
+#define LCD_COM_PORT		PORTD		// Порт для посыла команд в ЖКИ (команды и данные - могут быть не на одном порту!!!)
+//#define LCD_COM_PORT_DDR		DDRD 		// Регистр направления данных в порту, куда подцеплены линии команд ЖКИ, см.выше
+#define LCD_DAT_PORT		PORTD		// Порт отправки данных (и команд в данном случае)в ЖКИ
+#define LCD_DAT_PORT_DDR	DDRD		// Регистр направления данных порта, куда подцеплен ЖКИ линиями данных (и команд в данном случае)
 /* бит-маски выделения ниблов и отправки их в порт LCD_DAT_PORT составляются соответственно номеров выводов, к которым
 подключен ЖКИ. в данном случае используются выводы 4-7 порта. */
 
 //блок define для OW
-#define DDR_OW_PORT DDRB				// Регистр направления данных порта, к одному из выводов которого подключена линия 1-Wire
-#define OW_PORT PORTB					// Порт, к одному из выводов которого подключена линия 1-Wire
-#define OW_PIN PINB						// Регистр приёма ответа линии 1-Wire, к одному из выводов которого подключена эта линия
-#define OW_PIN_NUM 0					// Номер PIN, к которому подключена линия 1-Wire, для макроса _BV()
-#define bit_msk (1<<OW_PIN_NUM) 		// Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
+#define DDR_OW_PORT		DDRB			// Регистр направления данных порта, к одному из выводов которого подключена линия 1-Wire
+#define OW_PORT			PORTB			// Порт, к одному из выводов которого подключена линия 1-Wire
+#define OW_PIN			PINB			// Регистр приёма ответа линии 1-Wire, к одному из выводов которого подключена эта линия
+#define OW_PIN_NUM		0				// Номер PIN, к которому подключена линия 1-Wire, для макроса _BV()
+#define bit_msk			(1<<OW_PIN_NUM) // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
 
 //блок разных define
-#define N_DIGS 5						// размер массива цифр для преобразовании числа в строку для LCD, определяется размерностью максимального выводимого на LCD числа +1 для завершающего 0
-#define N_NAME 8						// размер массива для имени устройства
-#define EEP_MEM 1024					// объём епром для вычисления адреса последней и предпоследней ячейки, также для определения максимального количества устройств в епром
-#define IND_PAUSE 120 					// пауза на индикацию очередного кадра, 2с
-#define WAIT_LIM 900 					// пауза для ожидания действий пользователя, 15с
+#define N_DIGS			5				// размер массива цифр для преобразовании числа в строку для LCD, определяется размерностью максимального выводимого на LCD числа +1 для завершающего 0
+#define N_NAME			8				// размер массива для имени устройства
+#define EEP_MEM			1024			// объём епром для вычисления адреса последней и предпоследней ячейки, также для определения максимального количества устройств в епром
+#define IND_PAUSE		120 			// пауза на индикацию очередного кадра, 2с
+#define WAIT_LIM		900 			// пауза для ожидания действий пользователя, 15с
 
 //блок define для инициализации кнопки
-#define SRC_PORT PORTB					// Порт, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
-#define DDR_SRC_PORT DDRB				// Регистр направления данных порта, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
-#define SRC_PIN PINB					// Регистр приёма состояния кнопки
-#define SRC_PIN_NUM 1					// Номер PIN, к которому подключена кнопка, для макроса _BV()
-#define src_msk (1<<SRC_PIN_NUM)		// Битовая маска для проверки сигнала от кнопки на соответствующем пине
+#define SRC_PORT		PORTB			// Порт, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
+#define DDR_SRC_PORT	DDRB			// Регистр направления данных порта, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
+#define SRC_PIN			PINB			// Регистр приёма состояния кнопки
+#define SRC_PIN_NUM		1				// Номер PIN, к которому подключена кнопка, для макроса _BV()
+#define src_msk			(1<<SRC_PIN_NUM)// Битовая маска для проверки сигнала от кнопки на соответствующем пине
 
 //блок define для опроса кнопки
-#define CNT_QUICK 5						// количество сканирований на антидребезг, если больше - нажато точно
-#define CNT_SLOW 15						// количество сканирований на длинное нажатие
-#define QUICK 1							// длительность короткого нажатия
-#define SLOW 2							// длительность длинного нажатия
-#define RELEASED 0						// состояние кнопки - отпущена
-#define PRESSED 1						// состояние кнопки - нажата
+#define CNT_QUICK		5				// количество сканирований на антидребезг, если больше - нажато точно
+#define CNT_SLOW		15				// количество сканирований на длинное нажатие
+#define QUICK			1				// длительность короткого нажатия
+#define SLOW			2				// длительность длинного нажатия
+#define RELEASED		0				// состояние кнопки - отпущена
+#define PRESSED			1				// состояние кнопки - нажата
 
 // блок define для светодиода индикации gsm уровня
-#define LED_PORT		PORTB	// Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
-#define DDR_LED_PORT	DDRB	// Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
-#define LED_PIN_NUM		5		// Номер PIN, к которому подключен светодиод, для макроса _BV()
-#define GSM_LVL_TIME	3600	// интервал запроса уровня сигнала 60c
+#define LED_PORT		PORTB			// Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define DDR_LED_PORT	DDRB			// Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define LED_PIN_NUM		5				// Номер PIN, к которому подключен светодиод, для макроса _BV()
+#define GSM_LVL_TIME	3600			// интервал запроса уровня сигнала 60c
 
 //блок define для USART-GSM
 #define MYUBRR			103					// скорость usart 9600
@@ -61,7 +61,6 @@
 #define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
 
 //блок define для работы с модемом
-//#define SMS_SIZE			25					// ограничение длины исходящих смс, не используется более
 #define QUEUE_SIZE			16					// размер кольца очереди обработчиков
 #define INC_TASK_SIZE		8 					// размер кольца задач на чтение смс
 #define OUT_TASK_SIZE		4					// размер кольца задач на отправку смс
@@ -310,7 +309,7 @@ uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа мод
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
 /* варианты значений для шаблонов смс */
 enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
-    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, USER, MEMBERS, TEST1, TEST2};
+    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, USER, MEMBERS};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
 struct tel_list phones = {	{'#','0','0','0','#','\"','\0',},
                               {'+','0','0','0','0','0','0','0','0','0','0','0','\0'},
@@ -1154,22 +1153,20 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 {
     if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
     {
-        uint8_t cmd_txt[50];
-        strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);			//собираем текст команды
+        string_to_TX_Ring (WR_CMD[cmd_task_T].cmd);
         if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
         {
-            strcat ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].ram_par);		//добавляем текст команды из озу
+            arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
         }
         if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
         {
-            strcat_P ((char*)cmd_txt, (PGM_P)WR_CMD[cmd_task_T].pgm_par_1);	//добавляем текст команды из флэш
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_1);				//добавляем текст команды из флэш
         }
         if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
         {
-            strcat_P ((char*)cmd_txt, (PGM_P)WR_CMD[cmd_task_T].pgm_par_2);	//добавляем текст команды из флэш
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
         }
-        strcat_P ((char*)cmd_txt, (PGM_P) CRLF);	//собираем текст команды и записываем в задачу
-        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика
+        string_to_TX_Ring (CRLF);
         ans_lim = 180;								//установка времени ожидания ответа
         UCSR0B |= (1<<UDRIE0);						//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;								//запускаем таймер ответа
@@ -1198,9 +1195,8 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 
 uint8_t send_sms (void)	//HANDLER отправки смс
 {
-    uint8_t cmd[26];				// временный массив текста команды
     uint8_t name[N_NAME];			// временный массив имени устройства
-    static uint8_t k = 0;			// переменная номера устройства, static для циклов отправки длинных смс частями
+    static uint8_t k = 0;			// счётчик частей длинных смс при отправке кусками, static т.к. после очередного куска выходим до сброса UDRIE0
     static uint8_t n = 0;			// переменная количества устройств, static для циклов отправки длинных смс частями
     static uint8_t sms_type = 0;	// переменная для типа смс, static для циклов отправки длинных смс частями
     int8_t t = 0;					// переменная температуры из массива измерений
@@ -1210,11 +1206,10 @@ uint8_t send_sms (void)	//HANDLER отправки смс
     {
         if ((phones.phone_0[0] = '+')&&(phones.phone_0[1] = '7')&&(phones.phone_0[2] = '9'))//проверяем наличие телефона админа в массиве (+79...)
         {
-            strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);			// собираем команду
-            strcat ((char*)cmd, (char*)phones.phone_0);		// собираем команду
-            strcat_P ((char*)cmd, (PGM_P) QUOTES);			// собираем команду
-            strcat_P ((char*)cmd, (PGM_P) CRLF);			// собираем команду
-            arr_to_TX_Ring (cmd);							// отправляем команду в кольцо
+            string_to_TX_Ring (AT_CMGS);
+            arr_to_TX_Ring (phones.phone_0);
+            string_to_TX_Ring (QUOTES);
+            string_to_TX_Ring (CRLF);
             ans_lim = 180;									// таймер ожидания ответа 3с
             UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
             ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
@@ -1404,12 +1399,6 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                             break;
                     }
                     break;
-                    /* case TEST1:
-                        string_to_TX_Ring (quick);
-                        break;
-                    case TEST2:
-                        string_to_TX_Ring (slow);
-                        break;*/
 
                 default:							// если ни один случай не отработал
                     string_to_TX_Ring (sms_send);	// пока шлём текст "SMS FAIL!"
@@ -1465,13 +1454,11 @@ uint8_t send_sms (void)	//HANDLER отправки смс
 
 uint8_t read_sms (void)	//HANDLER чтения смс
 {
-    uint8_t cmd[16];														//массив текста команды
     if (!RD_SMS[inc_task_T].step.flag_1 && !RD_SMS[inc_task_T].step.flag_2) //если первый вход в задачу
     {
-        strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
-        strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
-        strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-        arr_to_TX_Ring (cmd);
+        string_to_TX_Ring (AT_CMGR);
+        arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
+        string_to_TX_Ring (CRLF);
         ans_lim = 120;						//таймер ответа 2с
         UCSR0B |= (1<<UDRIE0);				//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;						//запускаем таймер ожидания ответа "/r/nOK/r/n"
@@ -1482,10 +1469,9 @@ uint8_t read_sms (void)	//HANDLER чтения смс
     {
         if (mod_ans == OK)	//если в msg есть "/r/nOK/r/n"
         {
-            strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
-            strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
-            strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
-            arr_to_TX_Ring (cmd);
+            string_to_TX_Ring (AT_CMGD);
+            arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
+            string_to_TX_Ring (CRLF);
             ans_lim = 120;							//таймер ожидания ответа 2с
             UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
             ans_cnt = 0;							//запускаем таймер ответа
@@ -1552,16 +1538,28 @@ uint8_t parser(void) // разбор текста msg
 
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)			// если в msg есть r/n/+cmgr:
     {
-        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)				// если телефон правильный
+        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)			// если телефон правильный
         {
-            for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		 	// очистка массива задания контроллеру
-            uint8_t j = 0;
-            while (((*(txt_ptr + 70 + j)) != '\r') && (j < TODO_MAX))			// копируем текст команды контроллеру из смс (если на сим нет номера отправителя, смещение 64, не 70!!!)
-            {
-                todo_txt[j] = *(txt_ptr + 70 + j);
-                j++;
+            txt_ptr += 8;													// смещаем указатель за +CMGR:_
+            uint8_t q = 0;													// счётчик кавычек
+            while ((q != 8)&&(*txt_ptr != '\r'))// ищем последние закрывающие (восьмые) кавычки, за ними будет текст смс
+            {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
+                if (*txt_ptr == '\"')										// если наткнулись на кавычки
+                {q += 1;}												// растим счётчик
+                txt_ptr += 1;												// указатель двигаем в любом случае
             }
-            to_do(); 		// вызываем функцию распознавания команды
+            if (q == 8)														// только если насчитали 8 кавычек, иначе нафиг эту смс
+            {
+                txt_ptr += 2;
+                for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
+                uint8_t j = 0;
+                while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
+                {
+                    todo_txt[j] = *(txt_ptr + j);
+                    j++;
+                }
+                to_do(); 													// вызываем функцию распознавания команды
+            }
             pars_res = 'R';
         }
             // если телефон админа (из массива) не найден в ответе модема, но в массиве телефон user_0 не записан, принимаем номер из смс за user_0, записываем в массив и на сим
@@ -1793,13 +1791,7 @@ void to_do (void)			// модуль разбора и выполнения команды
     uint8_t n = eeprom_read_byte((uint8_t*)dev_qty);	// считываем количество устройств
     char* txt_ptr = NULL;								// указатель на начало искомого текста в строке todo_txt
 
-    if (todo_txt[0]=='r' && todo_txt[1]=='e' && todo_txt[2]=='q' && todo_txt[3]=='u' && todo_txt[4]=='e' && todo_txt[5]=='s' && todo_txt [6] == 't')
-    {
-        // out_to_queue ((uint8_t*)(PSTR("answer")));
-        sms_buff.sms_type = TEST2;
-        out_to_queue (&sms_buff);
-    }
-    else if (todo_txt[0]=='T' && todo_txt[1]==' ' && todo_txt[2]=='A' && todo_txt[3]=='L' && todo_txt[4]=='L')
+    if (todo_txt[0]=='T' && todo_txt[1]==' ' && todo_txt[2]=='A' && todo_txt[3]=='L' && todo_txt[4]=='L')
     {
         sms_buff.sms_type = ALL;
         out_to_queue (&sms_buff);
@@ -2988,8 +2980,6 @@ int main (void)
         {
             if (!RESET.flag_1)	//первый заход после сброса
             {
-                // send_string_to_LCD_XY (sim900, 0, 0);
-                // send_string_to_LCD_XY (not_rdy, 7, 0);
                 if (strstr_P((const char*)msg, (PGM_P) CALL_RDY) != NULL)//если в msg есть Ready\r\n
                 {
                     msg_clr();
@@ -3026,10 +3016,6 @@ int main (void)
                 {
                     msg_clr();
                     modem_rdy = 1;	//модем готов
-                    // lcd_clr();
-                    // _delay_us(50);
-                    // send_string_to_LCD_XY (not_rdy, 6, 0);
-                    // send_string_to_LCD_XY (sim900, 2, 0);//смещаем чтобы убрать "не" из "не готов"
 #ifdef DEBUG
                     lcd_dat_XY((0x39), 9, 1);	//вывод символа 9 на lcd
 #endif
@@ -3068,28 +3054,6 @@ int main (void)
                 time_gsm = 0;							//запускаем таймер запросов уровня gsm в прерывании
             }
 
-/* 			switch (press_time) 					// блок детектирования нажатия кнопки и задач по длительности жима
-			{
-				case QUICK :
-				{
-					sms_buff.sms_type = ALL;
-					out_to_queue (&sms_buff);			//отправляем перечень температур в смс
-					lcd_clr(); 							//очистка дисплея
-					send_string_to_LCD_XY(quick, 0, 0); //отправляем текст QUICK на lcd
-					press_time = 0;
-					break;
-				}
-				case SLOW : // сейчас не работает
-				{
-					//out_to_queue (slow);	//отправляем текст SLOW
-					lcd_clr();				// очистка дисплея
-					send_string_to_LCD_XY (slow, 0, 0);
-					press_time = 0;
-					break;
-				}
-				case 0 :
-					break;
-			} */
         }
     }	//конец бесконечного цикла
 }	//конец функции main
