@@ -7,6 +7,7 @@
 #include <string.h> //для strncpy
 // #include <math.h> раскомментировать, если нужна ф-я modf в ф-ии преобразования ЧПТ в цифры для передачи в ЖКИ
 
+
 //блок define для LCD
 #define RS PORTD3 //  Номер вывода порта, по которому передаётся команда RS в ЖКИ
 #define EN PORTD2 //  Номер вывода порта, по которому передаётся команда EN в ЖКИ
@@ -141,6 +142,7 @@ volatile uint8_t flash_cnt; //счётчик прерываний для индикации уровня gsm вспышк
 volatile uint8_t flash_num; //число прошедших вспышек
 volatile uint8_t pause_num; //число прошедших отрезков пауз между сериями вспышек
 const uint8_t gsm_lvl = 6; //уровень gsm сигнала, пока const
+
 
 typedef struct // структура для строки дисплея, из них строится кадр (экран)
 {
@@ -1100,6 +1102,28 @@ ISR(USART_RX_vect) // Обработчик прерывания по приходу данных в UDR0
     UDR_to_Ring(temp);
 }
 
+void USART_TXD(uint8_t data) // Передача байта по UART
+{
+    while (!( UCSR0A & (1 << UDRE0))) {;} // Ждем пока не отправятся предыдущие данные
+    UDR0 = data;	// Отпраляем текущие данные
+}
+
+void arr_to_USART(uint8_t *s ) // Передача массива по UART
+{
+    while(*s)
+    {
+        USART_TXD(*s++);
+    }
+}
+
+void string_to_USART(uint8_t *s ) // Передача сроки из флэш по UART
+{
+    while(pgm_read_byte(s))
+    {
+        USART_TXD(pgm_read_byte(s++));
+    }
+}
+
 void USART_Init( unsigned int ubrr)
 {
     UBRR0H = (uint8_t)(ubrr >> 8); //скорость 9600
@@ -1126,6 +1150,7 @@ int main(void)
     uint8_t chng_done = 0; // признак успешного изменения через UART
     uint8_t digits[N_DIGS]; //массив для передачи в utoa_fast_div для заполнения его кодами символов цифр температуры
     uint8_t tmp[20]; //массив для выгрузки из кольцевого буфера
+    int8_t *last_t = (void*) calloc(n_max, sizeof(*last_t));
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
     // LCD_COM_PORT = 0x00; // ставим 0 в RS и EN, раскомментировать если DAT и COM цеплять на разные порты
@@ -1265,6 +1290,7 @@ int main(void)
                     temp_float = (temperature[0]&0b00001111); //выделяем с помощью битовой маски дробную часть
 
                     temp_int_signed = (!temp_sign ? temp_int : ~(temp_sign - 1)); // добавляем знак к temp_int для сравнения с tmin, для отриц.числа перевод в доп.код
+                    last_t[i] = temp_int_signed; //заносим в масиив последних измеренных значений
                     if ((temp_int_signed < buffer.tmin)&&(!buffer.flags.lt_alarm)) //если Т ниже предела, а флаг не установлен
                     {
                         buffer.flags.lt_alarm = 1; // ставим флаг
@@ -1357,6 +1383,11 @@ int main(void)
                         send_arr_to_LCD_XY(buffer.name, 0, 0); //извещаем пользователя об аварии
                         send_string_to_LCD (blank);
                         send_string_to_LCD (crash);
+                        arr_to_USART(buffer.name);
+                        USART_TXD(' ');
+                        string_to_USART(crash);
+                        USART_TXD('\r');
+                        USART_TXD('\n');
                         _delay_ms(1500);
                     }
                     Dig_1 = '-';
@@ -1575,6 +1606,18 @@ int main(void)
                                 send_string_to_LCD_XY (name_error_sms, 0, 0);
                                 _delay_ms(2000);
                             }
+                        }
+                        else if ((tmp[0]=='A')&&(tmp[1]=='L')&&(tmp[2]=='L')&&(tmp[3]==' ')&&(tmp[4]=='T'))
+                        {
+                            UCSR0B &= ~(1 << RXEN0); //запрет приёма
+                            for (j=0; j<n; j++)
+                            {
+                                USART_TXD(((last_t[j] & 0b10000000) ? '-' : '+'));
+                                arr_to_USART(utoa_fast_div (((last_t[j] & 0b10000000) ? ((~last_t[j]) + 1) : last_t[j]), digits));
+                                USART_TXD('\r');
+                                USART_TXD('\n');
+                            }
+                            UCSR0B |= (1 << RXEN0); //разрешение приёма по факту прихода данных в UDR0
                         }
                         else
                         {
