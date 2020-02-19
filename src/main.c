@@ -138,6 +138,7 @@ unsigned char MEGAFON[]			PROGMEM = "Meg";				// Мегафон
 unsigned char TELE2[]			PROGMEM = "Tel";				// Теле2
 unsigned char USERS[]			PROGMEM = "USERS";				// начало смс со списком телефонов пользователей
 unsigned char DELETE[]			PROGMEM = "DELETE";				// начало смс об удалении пользователей
+unsigned char DENIED[]			PROGMEM = "ACCESS DENIED";		// смс об отказе в доступе
 
 //блок текстовых строк во флэш для работы с модемом
 unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
@@ -159,7 +160,7 @@ unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
 unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
 unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
 unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
-unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса
+unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса с открывающими кавычками номера телефона
 //unsigned char TEXT_100[]		PROGMEM = "#100#\"";		// номер баланса, пока здесь
 unsigned char ANS_CUSD[]		PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
 unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
@@ -167,14 +168,16 @@ unsigned char ANS_COPS[]		PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
 unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
 unsigned char ANS_CPBF[]		PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
 unsigned char USER_0[]			PROGMEM = "ADMIN";			// имя админа
-unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя
+unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя 1
+unsigned char USER_2[]			PROGMEM = "USER_2";			// имя пользователя 2
 unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans
 unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку
 unsigned char CELL_1[]			PROGMEM = "1,\"";			// запрос на запись в сим в ячейку 1 с открывающими кавычками номера телефона
 unsigned char CELL_2[]			PROGMEM = "2,\"";			// запрос на запись в сим в ячейку 2 с открывающими кавычками номера телефона
 unsigned char CELL_3[]			PROGMEM = "3,\"";			// запрос на запись в сим в ячейку 3 с открывающими кавычками номера телефона
-unsigned char TEXT_145[]		PROGMEM = "\",145,\"";		// часть запроса на запись телефона в сим с закрывающими кавычками номера
-unsigned char TEXT_129[]		PROGMEM = "\",129,\"";		// часть запроса на запись кода баланса с закрывающими кавычками кода
+unsigned char CELL_4[]			PROGMEM = "4,\"";			// запрос на запись в сим в ячейку 4 с открывающими кавычками номера телефона
+unsigned char TEXT_145[]		PROGMEM = "\",145,\"";		// часть запроса на запись телефона в сим с закр. кав. номера и откр. кав. имени
+unsigned char TEXT_129[]		PROGMEM = "\",129,\"";		// часть запроса на запись кода баланса в сим с закр. кав. номера и откр. кав. имени
 
 
 // блок глобальных переменных и структур
@@ -184,10 +187,10 @@ typedef struct //битовое поле для флагов
     uint8_t lt_alarm : 1;	// нижний порог температуры пройден вниз
     uint8_t ht_alarm : 1;	// верхний порог температуры превышен
     uint8_t line_alarm : 1;	// признак пропадания в процессе измерений
-    uint8_t sms_T : 1;		// отправить sms при Т < tmin или Т > tmax
-    uint8_t relay_1 : 1;	// реле 1
-    uint8_t relay_2 : 1;	// реле 2
-    uint8_t reserved : 1;	// свободный
+    uint8_t sms_T_0 : 1;	// отправить sms админу при Т < tmin или Т > tmax
+    uint8_t sms_T_1 : 1;	// отправить sms юзеру1 при Т < tmin или Т > tmax
+    uint8_t sms_T_2 : 1;	// отправить sms юзеру2 при Т < tmin или Т > tmax
+    uint8_t relay : 1;		// включть/выключить реле для этого датчика
 } bit_set;
 
 typedef struct //структура для параметров устройства
@@ -267,6 +270,7 @@ typedef struct	//структура содержимого смс
     uint8_t dev_num;					// номер устройства (заполняется при необходимости)
     int8_t param;						// параметр, пока только температура из массива результатов измерений или пороговая из устройства(заполняется при необходимости)
     uint8_t *ptr;						// указатель на массив символов (пока для отправки цифр баланса)
+    uint8_t person;						// кто запросил, определяюет направление ответа и права доступа
 }sms_mask;
 
 typedef struct 	//структура задачи приёма смс, 4 байта
@@ -296,9 +300,11 @@ typedef struct //структура задачи отправки команд в модем, 5 байт
 struct tel_list							// структура массивов телефонов пользователей и USSD-запросов
 {
     uint8_t balance [6];				// для USSD-запроса баланса
+    uint8_t reserv [4];					// резервный для временной записи трёх цифр кода баланса
+    uint8_t ans_to;						// кому отправить смс с балансом
     uint8_t phone_0 [13];				// администратор
     uint8_t phone_1 [13];				// обычный пользователь без прав изменений
-    uint8_t reserv [4];					// резервный для временной записи кода баланса в 12-ти значном виде
+    uint8_t phone_2 [13];				// обычный пользователь без прав изменений
 };
 
 sms_mask sms_buff;						// буфер для текста смс
@@ -314,13 +320,13 @@ uint8_t todo_txt [TODO_MAX];			// массив для выгрузки текста команды контроллеру
 uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа модема на запросы ( "ОК", ">" и пр.)
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
 /* варианты значений для шаблонов смс */
-enum {FAIL, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
-    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, MEMBERS};
+enum {FAIL = 1, ALARM, DONE, ALL, REN_DONE, NAME_ERR, MIN_LIM_SET, MAX_LIM_SET, LIM_ERR,
+    SMS_ON, SMS_OFF, T_LOW, T_HIGH, COM_ERR, MONEY, BAL_TEL, ADMIN, ABNT_1, ABNT_2, MEMBERS, DENY};
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
-struct tel_list phones = {	{'#','0','0','0','#','\0',},
+struct tel_list phones = {	{'#','0','0','0','#','\0'}, {'0','0','0','\0'}, 0,				// структура с телефонами
                               {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
                               {'0','0','0','0','0','0','0','0','0','0','0','0','\0'},
-                              {'0','0','0','\0'}};	// структура с телефонами
+                              {'0','0','0','0','0','0','0','0','0','0','0','0','\0'}};
 unsigned char gsm_sig;					// грязное значение уровня сигнала из ответа модема на запрос (0...31->0...100)
 
 //	блок переменных и массивов для работы с USART
@@ -843,10 +849,10 @@ void search_ID(void)
         buffer.flags.lt_alarm = 0;
         buffer.flags.ht_alarm = 0;
         buffer.flags.line_alarm =0;
-        buffer.flags.sms_T = 0;
-        buffer.flags.relay_1 = 0;
-        buffer.flags.relay_2 = 0;
-        buffer.flags.reserved =0;
+        buffer.flags.sms_T_0 = 0;
+        buffer.flags.sms_T_1 = 0;
+        buffer.flags.sms_T_2 = 0;
+        buffer.flags.relay =0;
         cli();
         eeprom_update_block (&buffer, &ee_arr[n-1], sizeof(buffer)); // записываем в епром описание текущего 1W устройства.
         sei();
@@ -1168,15 +1174,15 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
         {
             arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
         }
-        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_3 команды из флэш не пустой
+        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
         }
-        if (WR_CMD[cmd_task_T].pgm_par_3 != NULL)							//если параметр_4 команды из флэш не пустой
+        if (WR_CMD[cmd_task_T].pgm_par_3 != NULL)							//если параметр_3 команды из флэш не пустой
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_3);				//добавляем текст команды из флэш
         }
-        if (WR_CMD[cmd_task_T].pgm_par_4 != NULL)							//если параметр_5 команды из флэш не пустой
+        if (WR_CMD[cmd_task_T].pgm_par_4 != NULL)							//если параметр_4 команды из флэш не пустой
         {
             string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_4);				//добавляем текст команды из флэш
         }
@@ -1221,7 +1227,18 @@ uint8_t send_sms (void)	//HANDLER отправки смс
         if ((phones.phone_0[0] = '+')&&(phones.phone_0[1] = '7')&&(phones.phone_0[2] = '9'))//проверяем наличие телефона админа в массиве (+79...)
         {
             string_to_TX_Ring (AT_CMGS);
-            arr_to_TX_Ring (phones.phone_0);
+            switch (sms_buff.person)
+            {
+                case ADMIN:
+                    arr_to_TX_Ring (phones.phone_0);
+                    break;
+                case ABNT_1:
+                    arr_to_TX_Ring (phones.phone_1);
+                    break;
+                case ABNT_2:
+                    arr_to_TX_Ring (phones.phone_2);
+                    break;
+            }
             string_to_TX_Ring (QUOTES);
             string_to_TX_Ring (CRLF);
             ans_lim = 180;									// таймер ожидания ответа 3с
@@ -1396,16 +1413,29 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                             UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
                             return 0;
                         case 2:
+                            string_to_TX_Ring (USER_2);
+                            string_to_TX_Ring (NEW_LN);
+                            arr_to_TX_Ring (phones.phone_2);
+                            string_to_TX_Ring (NEW_LN);
+                            k = 2;
+                            UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
+                            return 0;
+                            break;
+                        case 3:
                             string_to_TX_Ring (BALANS);
                             string_to_TX_Ring (NEW_LN);
                             arr_to_TX_Ring (phones.balance);
                             string_to_TX_Ring (NEW_LN);
-                            k = 3;
+                            k = 4;
                             UCSR0B |= (1<<UDRIE0);			// разрешение прерывания по опустошению UDR передатчика
                             return 0;
-                        case 3:
+                        case 4:
                             break;
                     }
+                    break;
+
+                case DENY:
+                    string_to_TX_Ring (DENIED);
                     break;
 
                 default:							// если ни один случай не отработал
@@ -1548,7 +1578,13 @@ uint8_t parser(void) // разбор текста msg
     {
         txt_ptr += 8;														// смещаем указатель за +CMGR:_
         uint8_t q = 0;														// счётчик кавычек
-        if (strstr((const char*)txt_ptr, (char*)phones.phone_0)!=NULL)		// если телефон правильный
+        if (strstr((const char*)txt_ptr, (char*)phones.phone_0)!=NULL)		// если телефон админа
+        {sms_buff.person = ADMIN;}
+        else if (strstr((const char*)txt_ptr, (char*)phones.phone_1)!=NULL)	// если телефон юзера1
+        {sms_buff.person = ABNT_1;}
+        else if (strstr((const char*)txt_ptr, (char*)phones.phone_2)!=NULL)	// если телефон юзера2
+        {sms_buff.person = ABNT_2;}
+        if (sms_buff.person)												// если отправитель определён
         {
             while ((q != 8)&&(*txt_ptr != '\r'))// ищем последние закрывающие (восьмые) кавычки, за ними будет текст смс
             {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
@@ -1558,7 +1594,7 @@ uint8_t parser(void) // разбор текста msg
             }
             if (q == 8)														// только если насчитали 8 кавычек, иначе нафиг эту смс
             {
-                txt_ptr += 2;												// ставим указатель на первый символ текста смс
+                txt_ptr += 2;
                 for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
                 uint8_t j = 0;
                 while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
@@ -1570,10 +1606,10 @@ uint8_t parser(void) // разбор текста msg
             }
             pars_res = 'R';
         }
-            // если телефон админа (из массива) не найден в ответе модема, но в массиве телефон admin не записан, принимаем номер из смс за admin, записываем в массив и на сим
+            // если телефон (из массива) не найден в ответе модема, но в массиве телефон admin не записан, принимаем номер из смс за admin, записываем в массив и на сим
         else if ((phones.phone_0[0] != '+')&&(phones.phone_0[1] != '7')&&(phones.phone_0[2] != '9'))//достаточно проверки первых трёх символов
         {
-            while ((q != 3)&&(*txt_ptr != '\r'))// ищем третьи  кавычки, открывающие, за ними будет телефон "REC (UN)READ","+79...
+            while ((q != 3)&&(*txt_ptr != '\r'))// ищем третьи  кавычки, открывающие, "REC (UN)READ","+79..., за ними будет телефон
             {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
                 if (*txt_ptr == '\"')										// если наткнулись на кавычки
                 {q += 1;}												// растим счётчик
@@ -1586,7 +1622,8 @@ uint8_t parser(void) // разбор текста msg
                     phones.phone_0[i] = txt_ptr[i];
                 }
                 cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
-                sms_buff.sms_type = ADMIN;										// отправляем подтверждение отправителю
+                sms_buff.sms_type = ADMIN;									// отправляем подтверждение отправителю
+                sms_buff.person = ADMIN;
                 out_to_queue (&sms_buff);
             }
         }
@@ -1629,6 +1666,7 @@ uint8_t parser(void) // разбор текста msg
         money[j] = '\0';								// завершающий 0
         sms_buff.sms_type = MONEY;
         sms_buff.ptr = money;
+        sms_buff.person = phones.ans_to;				// указываем получателя, который запрашивал баланс
         out_to_queue (&sms_buff);
     }
 
@@ -1659,6 +1697,7 @@ uint8_t parser(void) // разбор текста msg
             sms_buff.dev_num = 0;
             sms_buff.param = 0;
             sms_buff.ptr = NULL;
+            sms_buff.person = ADMIN;
             out_to_queue(&sms_buff);
         }
     }
@@ -1666,19 +1705,27 @@ uint8_t parser(void) // разбор текста msg
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CPBF))!= NULL) 	// если в строке ответа есть "\r\n+CPBF: "
     {
         txt_ptr = txt_ptr + 12;												// ставим указатель на первый знак телефона в строке ответа
-        if ((strstr_P((const char*)txt_ptr, (PGM_P) USER_0)) != NULL)		// если в тексте ответа модема user_0, копируем телефон в массив админа
+        if ((strstr_P((const char*)txt_ptr, (PGM_P) USER_0)) != NULL)		// если в тексте ответа модема ADMIN, копируем телефон в массив админа
         {
             for (uint8_t i = 0; i < 12; i++)
             {
                 phones.phone_0[i] = *(txt_ptr + i);
             }
-            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_1, QUOTES);						// запрос поиска номера рядового пользователя
+            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_1, QUOTES);		// запрос поиска номера юзера1
+            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_2, QUOTES);		// запрос поиска номера юзера2
         }
-        else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_1)) != NULL)	// если в тексте ответа модема user_1, копируем телефон в массив пользователя
+        else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_1)) != NULL)	// если в тексте ответа модема USER_1, копируем телефон в массив пользователя
         {
             for (uint8_t i = 0; i < 12; i++)
             {
                 phones.phone_1[i] = *(txt_ptr + i);
+            }
+        }
+        else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_2)) != NULL)	// если в тексте ответа модема USER_2, копируем телефон в массив пользователя
+        {
+            for (uint8_t i = 0; i < 12; i++)
+            {
+                phones.phone_2[i] = *(txt_ptr + i);
             }
         }
         else if	((strstr_P((const char*)txt_ptr, (PGM_P) BALANS)) != NULL)	// если в тексте ответа модема есть balans
@@ -1749,6 +1796,7 @@ void out_to_queue (sms_mask *str)	//постановка в очередь задачи отправки смс
         WR_SMS[out_task_H].sms_txt.dev_num = str->dev_num;
         WR_SMS[out_task_H].sms_txt.param = str->param;
         WR_SMS[out_task_H].sms_txt.ptr = str->ptr;
+        WR_SMS[out_task_H].sms_txt.person = str->person;
         //обнуляем флаги процесса
         WR_SMS[out_task_H].step.flag_1 = WR_SMS[out_task_H].step.flag_2 = WR_SMS[out_task_H].step.flag_3 = WR_SMS[out_task_H].step.flag_4
                 = WR_SMS[out_task_H].step.flag_5 = WR_SMS[out_task_H].step.flag_6 = WR_SMS[out_task_H].step.flag_7 = WR_SMS[out_task_H].step.flag_8 = 0;
@@ -1817,86 +1865,102 @@ void to_do (void)			// модуль разбора и выполнения команды
     }
     else if ((todo_txt[0]=='R')&&(todo_txt[1]=='E')&&(todo_txt[2]=='N')&&(todo_txt[3]==' '))
     {
-        for (uint8_t i = 0; i < n; i++)
+        if (sms_buff.person == ADMIN)									// если смс от админа, выполняем
         {
-            eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-            if (!strncmp((void*)buffer.name, (void*)&todo_txt[4], sizeof(buffer.name)-1))
+            for (uint8_t i = 0; i < n; i++)
             {
-                location = &todo_txt[12];
-                strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
-                cli();
-                eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
-                sei();
-                chng_done = 1;
-                sms_buff.sms_type = REN_DONE;
+                eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                if (!strncmp((void*)buffer.name, (void*)&todo_txt[4], sizeof(buffer.name)-1))
+                {
+                    location = &todo_txt[12];
+                    strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
+                    cli();
+                    eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
+                    sei();
+                    chng_done = 1;
+                    sms_buff.sms_type = REN_DONE;
+                }
+            }
+            if (!chng_done)
+            {
+                lcd_clr();
+                send_string_to_LCD_XY (name_error_ren, 0, 0);
+                sms_buff.sms_type = NAME_ERR;
             }
         }
-        if (!chng_done)
+        else
         {
-            lcd_clr();
-            send_string_to_LCD_XY (name_error_ren, 0, 0);
-            sms_buff.sms_type = NAME_ERR;
+            sms_buff.sms_type = DENY;
         }
         out_to_queue (&sms_buff);
     }
     else if ((todo_txt[0]=='T')&&((todo_txt[1]=='L')||(todo_txt[1]=='H'))&&(todo_txt[2]=='A')&&(todo_txt[3]=='L')&&(todo_txt[4]==' ')&&(todo_txt[4 + N_NAME]==' ')&&((todo_txt[5 + N_NAME]=='-')||(todo_txt[5 + N_NAME]=='+')))
     {
-        int8_t t_lim = atoi_fast (&todo_txt[5 + N_NAME]);
-        if ((t_lim >= -127) && (t_lim <= 127))
+        if (sms_buff.person == ADMIN)																		// если запросил админ
         {
-            for (uint8_t i = 0; i < n; i++)
+            int8_t t_lim = atoi_fast (&todo_txt[5 + N_NAME]);
+            if ((t_lim >= -127) && (t_lim <= 127))
             {
-                eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-                if (!strncmp((void*)buffer.name, (void*)&todo_txt[5], sizeof(buffer.name)-1))
+                for (uint8_t i = 0; i < n; i++)
                 {
-                    if (todo_txt[1]=='L')
+                    eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                    if (!strncmp((void*)buffer.name, (void*)&todo_txt[5], sizeof(buffer.name)-1))
                     {
-                        buffer.tmin = t_lim;
-                        cli();
-                        eeprom_update_block (&buffer.tmin, &ee_arr[i].tmin, sizeof buffer.tmin);
-                        sei();
-                        send_arr_to_LCD_XY(buffer.name, 0, 0);
-                        send_string_to_LCD (blank);
-                        send_string_to_LCD (t_min);
-                        send_string_to_LCD (blank);
-                        lcd_dat ((buffer.tmin & 0b10000000) ? '-' : '+');
-                        send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
-                        chng_done = 1;
-                        sms_buff.sms_type = MIN_LIM_SET;
-                        sms_buff.param = buffer.tmin;
+                        if (todo_txt[1]=='L')
+                        {
+                            buffer.tmin = t_lim;
+                            cli();
+                            eeprom_update_block (&buffer.tmin, &ee_arr[i].tmin, sizeof buffer.tmin);
+                            sei();
+                            send_arr_to_LCD_XY(buffer.name, 0, 0);
+                            send_string_to_LCD (blank);
+                            send_string_to_LCD (t_min);
+                            send_string_to_LCD (blank);
+                            lcd_dat ((buffer.tmin & 0b10000000) ? '-' : '+');
+                            send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
+                            chng_done = 1;
+                            sms_buff.sms_type = MIN_LIM_SET;								// шлём админу подтверждение
+                            sms_buff.param = buffer.tmin;
+                        }
+                        else if (todo_txt[1]=='H')
+                        {
+                            buffer.tmax = t_lim;
+                            cli();
+                            eeprom_update_block (&buffer.tmax, &ee_arr[i].tmax, sizeof buffer.tmax);
+                            sei();
+                            send_arr_to_LCD_XY(buffer.name, 0, 0);
+                            send_string_to_LCD (blank);
+                            send_string_to_LCD (t_max);
+                            send_string_to_LCD (blank);
+                            lcd_dat ((buffer.tmax & 0b10000000) ? '-' : '+');
+                            send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
+                            chng_done = 1;
+                            sms_buff.sms_type = MAX_LIM_SET;								// шлём админу подтверждение
+                            sms_buff.param = buffer.tmax;
+                        }
+                        sms_buff.dev_num = i;
                     }
-                    else if (todo_txt[1]=='H')
-                    {
-                        buffer.tmax = t_lim;
-                        cli();
-                        eeprom_update_block (&buffer.tmax, &ee_arr[i].tmax, sizeof buffer.tmax);
-                        sei();
-                        send_arr_to_LCD_XY(buffer.name, 0, 0);
-                        send_string_to_LCD (blank);
-                        send_string_to_LCD (t_max);
-                        send_string_to_LCD (blank);
-                        lcd_dat ((buffer.tmax & 0b10000000) ? '-' : '+');
-                        send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
-                        chng_done = 1;
-                        sms_buff.sms_type = MAX_LIM_SET;
-                        sms_buff.param = buffer.tmax;
-                    }
-                    sms_buff.dev_num = i;
+                }
+                if (!chng_done)
+                {
+                    sms_buff.sms_type = NAME_ERR;
+                    send_string_to_LCD_XY (name_error_al, 0, 0);
                 }
             }
-            if (!chng_done)
+            else
             {
-                sms_buff.sms_type = NAME_ERR;
-                send_string_to_LCD_XY (name_error_al, 0, 0);
+                send_string_to_LCD_XY (t_error, 0, 0);
+                sms_buff.sms_type = LIM_ERR;
             }
         }
-        else
+        else																				// если запросил юзер
         {
-            send_string_to_LCD_XY (t_error, 0, 0);
-            sms_buff.sms_type = LIM_ERR;
+            sms_buff.sms_type = DENY;														// шлём access denied
         }
         out_to_queue (&sms_buff);
     }
+
+
     else if ((todo_txt[0]=='S')&&(todo_txt[1]=='M')&&(todo_txt[2]=='S')&&(todo_txt[3]==' ')&&(todo_txt[4]=='T')&&((todo_txt[5]=='L')||(todo_txt[5]=='H'))&&((todo_txt[6]=='1')||(todo_txt[6]=='0'))&&(todo_txt[7]==' '))
     {
         for (uint8_t i = 0; i < n; i++)
@@ -1907,7 +1971,12 @@ void to_do (void)			// модуль разбора и выполнения команды
             {
                 if ((todo_txt[5]=='L')&&(todo_txt[6]=='1'))
                 {
-                    buffer.flags.sms_T = 1;
+                    if (sms_buff.person == ADMIN)
+                    {buffer.flags.sms_T_0 = 1;}
+                    else if (sms_buff.person == ABNT_1)
+                    {buffer.flags.sms_T_1 = 1;}
+                    else if (sms_buff.person == ABNT_2)
+                    {buffer.flags.sms_T_2 = 1;}
                     cli();
                     eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                     sei();
@@ -1923,7 +1992,12 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 else if ((todo_txt[5]=='H')&&(todo_txt[6]=='1'))
                 {
-                    buffer.flags.sms_T = 1;
+                    if (sms_buff.person == ADMIN)
+                    {buffer.flags.sms_T_0 = 1;}
+                    else if (sms_buff.person == ABNT_1)
+                    {buffer.flags.sms_T_1 = 1;}
+                    else if (sms_buff.person == ABNT_2)
+                    {buffer.flags.sms_T_2 = 1;}
                     cli();
                     eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                     sei();
@@ -1940,7 +2014,12 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 else if ((todo_txt[5]=='L')&&(todo_txt[6]=='0'))
                 {
-                    buffer.flags.sms_T = 0;
+                    if (sms_buff.person == ADMIN)
+                    {buffer.flags.sms_T_0 = 0;}
+                    else if (sms_buff.person == ABNT_1)
+                    {buffer.flags.sms_T_1 = 0;}
+                    else if (sms_buff.person == ABNT_2)
+                    {buffer.flags.sms_T_2 = 0;}
                     cli();
                     eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                     sei();
@@ -1957,7 +2036,12 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 else if ((todo_txt[5]=='H')&&(todo_txt[6]=='0'))
                 {
-                    buffer.flags.sms_T = 0;
+                    if (sms_buff.person == ADMIN)
+                    {buffer.flags.sms_T_0 = 0;}
+                    else if (sms_buff.person == ABNT_1)
+                    {buffer.flags.sms_T_1 = 0;}
+                    else if (sms_buff.person == ABNT_2)
+                    {buffer.flags.sms_T_2 = 0;}
                     cli();
                     eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                     sei();
@@ -1982,109 +2066,191 @@ void to_do (void)			// модуль разбора и выполнения команды
         out_to_queue (&sms_buff);
     }
 
-    else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_0)) != NULL)//если в todo_txt есть user_0
+    else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_0)) != NULL)//если в todo_txt есть ADMIN
     {
-        uint8_t i = 0;
-        uint8_t j = 0;
-        while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
+        if (sms_buff.person == ADMIN)
         {
-            i++;
-        }
-        if (todo_txt [i] == '+')
-        {
-            phones.phone_0[0] = todo_txt [i];			// записываем + первым символом в массив телефона админа
-            j += 1;
-            i += 1;
-            while (isdigit(todo_txt [i])&&(j < 12)) 	// переписываем цифры после + в массив телефона админа
+            uint8_t i = 0;
+            uint8_t j = 0;
+            while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
             {
-                phones.phone_0[j] = todo_txt [i];
                 i++;
-                j++;
             }
-            if (j == 12)								// если записан + и 12 цифр
+            if (todo_txt [i] == '+')
             {
-                cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	// записываем этот телефон на сим
-                sms_buff.sms_type = ADMIN;													// отправляем подтверждение админу
-                out_to_queue (&sms_buff);
+                phones.phone_0[0] = todo_txt [i];			// записываем + первым символом в массив телефона админа
+                j += 1;
+                i += 1;
+                while (isdigit(todo_txt [i])&&(j < 12)) 	// переписываем цифры после + в массив телефона админа
+                {
+                    phones.phone_0[j] = todo_txt [i];
+                    i++;
+                    j++;
+                }
+                if (j == 12)								// если записан + и 12 цифр
+                {
+                    cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	// записываем этот телефон на сим
+                    sms_buff.sms_type = ADMIN;													// отправляем подтверждение админу (старому)
+                }
             }
-
         }
+        else
+        {
+            sms_buff.sms_type = DENY;															// шлём access denied
+        }
+        out_to_queue (&sms_buff);
     }
 
     else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_1)) != NULL)//если в todo_txt есть user_1
     {
-        uint8_t i = 0;
-        uint8_t j = 0;
-        while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
+        if (sms_buff.person == ADMIN)
         {
-            i++;
-        }
-        if (todo_txt [i] == '+')
-        {
-            phones.phone_1[0] = todo_txt [i];								// записываем + первым символом в массив телефона админа
-            j += 1;
-            i += 1;
-            while (isdigit(todo_txt [i])&&(j < 12)) 						// переписываем цифры после + в массив телефона админа
+            uint8_t i = 0;
+            uint8_t j = 0;
+            while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
             {
-                phones.phone_1[j] = todo_txt [i];
                 i++;
-                j++;
             }
-            if (j == 12)													// если записан + и 12 цифр
+            if (todo_txt [i] == '+')
             {
-                cmd_to_queue (AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);	//записываем этот телефон на сим
-                sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
-                out_to_queue (&sms_buff);
+                phones.phone_1[0] = todo_txt [i];								// записываем + первым символом в массив телефона user_1
+                j += 1;
+                i += 1;
+                while (isdigit(todo_txt [i])&&(j < 12)) 						// переписываем цифры после + в массив телефона user_1
+                {
+                    phones.phone_1[j] = todo_txt [i];
+                    i++;
+                    j++;
+                }
+                if (j == 12)													// если записан + и 12 цифр
+                {
+                    cmd_to_queue (AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);	//записываем этот телефон на сим
+                    sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
+                }
             }
         }
+        else
+        {
+            sms_buff.sms_type = DENY;															// шлём access denied
+        }
+        out_to_queue (&sms_buff);
+    }
+
+    else if ((strstr_P((const char*)todo_txt, (PGM_P) USER_2)) != NULL)//если в todo_txt есть user_2
+    {
+        if (sms_buff.person == ADMIN)
+        {
+            uint8_t i = 0;
+            uint8_t j = 0;
+            while ((todo_txt [i] != '+')&&(i < TODO_MAX))	// ищем +
+            {
+                i++;
+            }
+            if (todo_txt [i] == '+')
+            {
+                phones.phone_2[0] = todo_txt [i];								// записываем + первым символом в массив телефона user_2
+                j += 1;
+                i += 1;
+                while (isdigit(todo_txt [i])&&(j < 12)) 						// переписываем цифры после + в массив телефона user_2
+                {
+                    phones.phone_2[j] = todo_txt [i];
+                    i++;
+                    j++;
+                }
+                if (j == 12)													// если записан + и 12 цифр
+                {
+                    cmd_to_queue (AT_CPBW, CELL_3, phones.phone_2, TEXT_145, USER_2, QUOTES);	//записываем этот телефон на сим
+                    sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
+                }
+            }
+        }
+        else
+        {
+            sms_buff.sms_type = DENY;															// шлём access denied
+        }
+        out_to_queue (&sms_buff);
     }
 
     else if (strstr_P((const char*)todo_txt, (PGM_P) USERS) != NULL)		//если в todo_txt есть USERS
     {
-        sms_buff.sms_type = MEMBERS;										// отправляем список пользователя
+        if (sms_buff.person == ADMIN)
+        {
+            sms_buff.sms_type = MEMBERS;									// шлём админу список пользователей
+        }
+        else
+        {
+            sms_buff.sms_type = DENY;										// шлём отправителю отказ в доступе
+        }
         out_to_queue (&sms_buff);
     }
 
     else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) BALANCE)) != NULL)	//если в todo_txt есть BALANCE
     {
+        phones.ans_to = sms_buff.person;								// фиксируем, кто прислал запрос, протом отправить ответ ему
         txt_ptr = txt_ptr + 8;											// ставим указатель после BALANCE и пробела
         if ((*txt_ptr == '*')||(*txt_ptr == '#')||(isdigit(*txt_ptr)))  // если после BALANCE и пробела есть *,# или цифра
         {
-            if (!isdigit(*txt_ptr))										// если после BALANCE и пробела не цифра
+            if (sms_buff.person == ADMIN)
             {
-                txt_ptr +=1;											// сдвигаем ещё на 1
+                if (!isdigit(*txt_ptr))									// если после BALANCE и пробела не цифра
+                {
+                    txt_ptr +=1;										// сдвигаем ещё на 1
+                }
+                uint8_t i = 0;
+                while ((isdigit(txt_ptr[i]))&&(i < 3))
+                {
+                    phones.balance[i + 1] = txt_ptr[i];					// записываем три цифры в рабочий массив телефона баланса
+                    phones.reserv [i] = txt_ptr[i];						// записываем три цифры в массив условного телефона баланса для записи на сим
+                    i++;
+                }
+                if (i == 3)												// если получилось три цифры, всё ок
+                {
+                    cmd_to_queue (AT_CPBW, CELL_1, phones.reserv, TEXT_129, BALANS, QUOTES);// отправляем в сим условный номер баланса
+                }
+                else													// если не получилось три цифры, неверная команда
+                {
+                    sms_buff.sms_type = COM_ERR;
+                    out_to_queue (&sms_buff);
+                }
             }
-            uint8_t i = 0;
-            while ((isdigit(txt_ptr[i]))&&(i < 3))
+            else
             {
-                phones.balance[i + 1] = txt_ptr[i];                     // записываем три цифры в рабочий массив телефона баланса
-                phones.reserv [i] = txt_ptr[i];                         // записываем три цифры в массив условного телефона баланса для записи на сим
-                i++;
-            }
-            if (i == 3)													// если получилось три цифры, всё ок
-            {
-                cmd_to_queue (AT_CPBW, CELL_1, phones.reserv, TEXT_129, BALANS, QUOTES);// отправляем в сим условный номер баланса
-            }
-            else														// если не получилось три цифры, неверная команда
-            {
-                sms_buff.sms_type = COM_ERR;
+                sms_buff.sms_type = DENY;								// шлём отправителю отказ в доступе
                 out_to_queue (&sms_buff);
             }
         }
         cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
     }
 
-    else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)	// если в todo_txt есть DELETE
+    else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)		// если в todo_txt есть DELETE
     {
-        txt_ptr = txt_ptr + 5;
-        if (strstr((const char*)txt_ptr, (char*)phones.phone_1))					// если номер из смс номер есть в массиве
+        if (sms_buff.person == ADMIN)
         {
-            for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
-            {phones.phone_1[i] = '0';}
-            cmd_to_queue(AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);// писшем в сим телефон с нулями
-            sms_buff.sms_type = MEMBERS;
-            out_to_queue(&sms_buff);												// отправляем обновлённый список юзеров
+            txt_ptr = txt_ptr + 5;
+            if (strstr((const char*)txt_ptr, (char*)phones.phone_1))					// если номер из смс номер есть в массиве
+            {
+                for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
+                {phones.phone_1[i] = '0';}
+                cmd_to_queue(AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);// писшем в сим телефон с нулями
+                sms_buff.sms_type = MEMBERS;											// отправляем обновлённый список юзеров
+            }
+            else if (strstr((const char*)txt_ptr, (char*)phones.phone_2))				// если номер из смс номер есть в массиве
+            {
+                for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
+                {phones.phone_2[i] = '0';}
+                cmd_to_queue(AT_CPBW, CELL_4, phones.phone_2, TEXT_145, USER_2, QUOTES);// писшем в сим телефон с нулями
+                sms_buff.sms_type = MEMBERS;											// отправляем обновлённый список юзеров
+            }
+            else
+            {
+                sms_buff.sms_type = COM_ERR;
+            }
         }
+        else
+        {
+            sms_buff.sms_type = DENY;													// шлём отправителю отказ в доступе
+        }
+        out_to_queue (&sms_buff);
     }
 
     else
@@ -2104,6 +2270,7 @@ ISR(USART_RX_vect)	// Обработчик прерывания для приёмника по приходу данных в UD
     pause_cnt = 0;				// сброс счётчика паузы в ISR(TIMER0_OVF_vect) после приёма очередного байта #############
     if(UCSR0A & (1 << FE0))		// Ошибка кадрирования, не пишем новые данные, сообщаем
     {
+        temp = UDR0;			// буфер надо прочитать, иначе флаг FE не сбросится, но вкольцо не пишем
         send_string_to_LCD_XY(frame_err, 0, 0);
         //string_to_USART (frame_err);#############
         // _delay_ms(1500);
@@ -2562,10 +2729,10 @@ void menu(uint8_t* qty, uint8_t* active) 	// КА меню для удаления/добавления/вст
                     buffer.flags.lt_alarm = 0;
                     buffer.flags.ht_alarm = 0;
                     buffer.flags.line_alarm =0;
-                    buffer.flags.sms_T = 0;
-                    buffer.flags.relay_1 = 0;
-                    buffer.flags.relay_2 = 0;
-                    buffer.flags.reserved =0;
+                    buffer.flags.sms_T_0 = 0;
+                    buffer.flags.sms_T_1 = 0;
+                    buffer.flags.sms_T_2 = 0;
+                    buffer.flags.relay =0;
                     cli();
                     eeprom_update_block (&buffer, &ee_arr[n], sizeof(buffer)); // записываем в конец списка в епром описание текущего 1W устройства.
                     sei();
@@ -2804,42 +2971,70 @@ int main (void)
                     last_t[i] = temp_int_signed;										// заносим в масиив последних измеренных значений
                     if ((temp_int_signed < buffer.tmin)&&(!buffer.flags.lt_alarm))		// если Т ниже предела, а флаг не установлен
                     {
-                        buffer.flags.lt_alarm = 1; // ставим флаг
+                        buffer.flags.lt_alarm = 1; 					// ставим флаг
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); // записываем флаги в епром
                         sei();
-                        if (buffer.flags.sms_T) // если установлен флаг отправки sms, отправляем на lcd
+                        if ((buffer.flags.sms_T_0)||(buffer.flags.sms_T_1)||(buffer.flags.sms_T_2)) // если установлен флаг отправки sms
                         {
                             sms_buff.sms_type = T_LOW;
                             sms_buff.dev_num = i;
                             sms_buff.param = buffer.tmin;
-                            out_to_queue (&sms_buff);
-                            lcd_clr();
+                            if (buffer.flags.sms_T_0)					// если флаг отправки админу установлен
+                            {
+                                sms_buff.person = ADMIN;				// шлём админу
+                                out_to_queue (&sms_buff);
+                            }
+                            if (buffer.flags.sms_T_1)					// если флаг отправки юзеру1 установлен
+                            {
+                                sms_buff.person = ABNT_1;				// шлём юзеру1
+                                out_to_queue (&sms_buff);
+                            }
+                            if (buffer.flags.sms_T_2)					// если флаг отправки юзеру2 установлен
+                            {
+                                sms_buff.person = ABNT_2;				// шлём юзеру2
+                                out_to_queue (&sms_buff);
+                            }
+                            /* lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
                             send_string_to_LCD (blank);
                             send_string_to_LCD (t_low);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
-                            send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
+                            send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits)); */
                         }
                     }
-                    else if ((temp_int_signed > buffer.tmax)&&(!buffer.flags.ht_alarm))				//если Т выше предела, а флаг не установлен
+                    else if ((temp_int_signed > buffer.tmax)&&(!buffer.flags.ht_alarm))	//если Т выше предела, а флаг не установлен
                     {
-                        buffer.flags.ht_alarm = 1; // ставим флаг
+                        buffer.flags.ht_alarm = 1; 					// ставим флаг
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                         sei();
-                        if (buffer.flags.sms_T) //если установлен флаг отправки sms, отправляем на lcd
+                        if (buffer.flags.sms_T_0) 					//если установлен флаг отправки sms, отправляем смс и на lcd
                         {
                             sms_buff.sms_type = T_HIGH;
                             sms_buff.dev_num = i;
                             sms_buff.param = buffer.tmax;
-                            out_to_queue (&sms_buff);
-                            lcd_clr();
+                            if (buffer.flags.sms_T_0)					// если флаг отправки админу установлен
+                            {
+                                sms_buff.person = ADMIN;				// шлём админу
+                                out_to_queue (&sms_buff);
+                            }
+                            if (buffer.flags.sms_T_1)					// если флаг отправки юзеру1 установлен
+                            {
+                                sms_buff.person = ABNT_1;				// шлём юзеру1
+                                out_to_queue (&sms_buff);
+                            }
+                            if (buffer.flags.sms_T_2)					// если флаг отправки юзеру2 установлен
+                            {
+                                sms_buff.person = ABNT_2;				// шлём юзеру2
+                                out_to_queue (&sms_buff);
+                            }
+                            /* lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
                             send_string_to_LCD (blank);
                             send_string_to_LCD (t_high);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
-                            send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
+                            send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits)); */
                         }
                     }
                     else if ((temp_int_signed > buffer.tmin)&&(buffer.flags.lt_alarm))				//если Т выше (T min), а флаг установлен
@@ -2873,6 +3068,7 @@ int main (void)
                         sms_buff.dev_num = i;					//записываем в буферную структуру номер аварийного устройства
                         sms_buff.param = 0;						//обнуляем параметр, здесь не нужен
                         sms_buff.ptr = NULL;
+                        sms_buff.person = ADMIN;				// пока шлём только админу
                         out_to_queue (&sms_buff);				//ставим задачу на отправку смс
                     }
                 }
