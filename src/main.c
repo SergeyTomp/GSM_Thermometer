@@ -333,7 +333,7 @@ unsigned char read_data(void)
 }
 
 // Проверка CRC8
-void CRC_check(uint8_t *data, uint8_t crcbitN, uint8_t n)
+int8_t CRC_check(uint8_t *data, uint8_t crcbitN)
 {
     uint8_t j; // счётчик байтов в массиве data, котоый проверяем
     uint8_t crc8 = 0; //переменная для сравнивания результата расчёта CRC8 по младшим (crcbitN-1) байтам с CRC8 из crcbitN байта
@@ -357,13 +357,10 @@ void CRC_check(uint8_t *data, uint8_t crcbitN, uint8_t n)
             data_crc >>=1;
         }
     }
-    if (!(crc8 == data[j])) // если последний байт четности не равны - плохо
-    {
-        lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
-        send_string_to_LCD (error);//выводим "ошибка иниц."
-        lcd_dat (n +'0');
-        abort ();
-    }
+    if (crc8 == data[j]) // если последний байт и CRC равны - хорошо
+        return 0;
+    else
+        return 1;
 }
 // Функция поиска устройств, запись в еепром, проверка CRC кодов найденных устройств
 void search_ID(void)
@@ -504,7 +501,13 @@ void search_ID(void)
     while(i != n)//обрабатываем количество устройств(равно n из цикла поиска), начинаем с первого устройства
     {
         eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer));// считываем описание усройства их епром
-        CRC_check (buffer.code, 0x07, i); // передаём указатель на массив с ID, номер байта CRC8, номер датчика
+        if (CRC_check (buffer.code, 0x07)) // передаём указатель на массив с ID, номер байта CRC8
+        {
+            lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+            send_string_to_LCD (error);//выводим "ошибка иниц."
+            lcd_dat (i +'0');
+            _delay_ms(1500);
+        }
         i++;
     }
 
