@@ -45,14 +45,15 @@
 #define RELEASED 0 //состояние кнопки - отпущена
 #define PRESSED 1 //состояние кнопки - нажата
 
-// блок define для светодиода индмкации gsm уровня
+// блок define для светодиода индикации gsm уровня
 #define LED_PORT PORTB //Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
 #define DDR_LED_PORT DDRB // Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
 #define LED_PIN_NUM 5 // Номер PIN, к которому подключен светодиод, для макроса _BV()
 
-//блок define для GSM
+//блок define для USART-GSM
 #define MYUBRR 103 // скорость usart 9600
-#define RX_RING_SIZE 256 // размер буфера берём 256, чтобы пока обойтись без маски при переходе через 255->0
+#define RX_RING_SIZE 256 // размер буфера берём пока 256, в дальнейшем нужно обеспечить размер равный степени 2.
+#define RX_IND_MSK (RX_RING_SIZE - 1) // маска для индексов кольцевого буфера приёмника, нужно лля обнуления индекса при переходе через RX_RING_SIZE->0
 
 // блок текстовых сообщений во флэш
 unsigned char absence[] PROGMEM = "Нет датчиков"; //ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
@@ -138,8 +139,8 @@ const uint16_t dev_last_n = (EEP_MEM - 2);//константа, содержащая значение адрес
 const uint8_t n_max = (uint8_t)((EEP_MEM - 2) / sizeof(device)); //максимально допустимое количество усройств в епром
 uint8_t scratchpad [9]; //массив байтов, прочитанных из блокнота DS18B20
 volatile uint8_t RX_IndexIN;// входящий индекс кольцевого буфера, здесь обязательно volatile, меняется только в прерывании
-volatile uint8_t RX_IndexOUT; // выходящий индекс кольцевого буфера
-volatile uint8_t RX_ring[RX_RING_SIZE]; //массив для кольцевого буфера
+uint8_t RX_IndexOUT; // выходящий индекс кольцевого буфера
+uint8_t RX_ring[RX_RING_SIZE]; //массив для кольцевого буфера
 volatile uint8_t flash_cnt; //счётчик прерываний для индикации уровня gsm вспышками диода
 volatile uint8_t flash_num; //число прошедших вспышек
 volatile uint8_t pause_num; //число прошедших отрезков пауз между сериями вспышек
@@ -1024,28 +1025,28 @@ void ClearRing(void)
 // Функция возвращает количество непрочитанных байт в кольцевом буфере
 uint8_t RX_IndexNumber(void)
 {
-    if (RX_IndexIN >= RX_IndexOUT)
-    {
-        return (RX_IndexIN - RX_IndexOUT);
-    }
-    else
-    {
-        return ((RX_RING_SIZE - RX_IndexOUT) + RX_IndexIN);
-    }
+    return (RX_IndexIN - RX_IndexOUT) & RX_IND_MSK; //как ни странно, но это то же самое, что ниже в комментариях
+/*
+	if (RX_IndexIN >= RX_IndexOUT)
+	{
+		return (RX_IndexIN - RX_IndexOUT);
+	}
+	else
+	{
+		return ((RX_RING_SIZE - RX_IndexOUT) + RX_IndexIN);
+	}
+*/
 }
 
 // Функция загрузки байта данных в кольцевой буфер
 uint8_t UDR_to_RX_Ring(char value)
 {
-    if((UCSR0A & (1 << FE0)))
-        return 1;   // Ошибка кадрирования, не пишем новые данные
-    else
-        RX_IndexIN++;
-    //RX_IndexIN &= BUFFER_MASK;
-    if(RX_IndexIN == RX_IndexOUT)
-        return 2; // Переполнение буфера, не пишем новые данные
+    if (((RX_IndexIN + 1) & RX_IND_MSK) == RX_IndexOUT)
+        return 1; // Переполнение буфера, не пишем новые данные
     else
     {
+        RX_IndexIN++;
+        RX_IndexIN &= RX_IND_MSK;
         RX_ring[RX_IndexIN] = value;
         return 0;
     }
@@ -1057,7 +1058,7 @@ void RX_Ring_to_Str(uint8_t *str, uint8_t lenght)
     for(uint8_t i=0; i<lenght; i++)
     {
         RX_IndexOUT++;
-        //RX_IndexOUT &= BUFFER_MASK;
+        RX_IndexOUT &= RX_IND_MSK;
         *str = RX_ring[RX_IndexOUT];
         str++;
     }
@@ -1142,27 +1143,26 @@ void string_to_USART(const uint8_t *s ) // Передача сроки из флэш по UART
 
 ISR(USART_RX_vect) // Обработчик прерывания по приходу данных в UDR0
 {
-    uint8_t temp;
-    //uint8_t wr_err = 0; //код успешности записи в кольцо
-    temp = UDR0;
-    //if(!(temp == 0x0A || temp == 0x0D))
-    UDR_to_RX_Ring(temp);
-
-/*
-	if(wr_err == 1) //при ошибке кадра выводим сообщение
-	{
-		send_string_to_LCD_XY(frame_err, 0, 0);
-		string_to_USART (frame_err);
-		_delay_ms(1500);
-	}
-	wr_err = UDR_to_RX_Ring(temp);// запрашиваем запись в кольцо и принимаем код успешности
-	if(wr_err == 2); //при ошибке переполнения кольца выводим сообщение
-	{
-		send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
-		string_to_USART (rx_ring_ovf);
-		_delay_ms(1500);
-	}
-	*/
+    uint8_t temp; //временная переменная для приёма из UDR0
+    uint8_t wr_err; //код успешности записи в кольцо
+    if(UCSR0A & (1 << FE0))// Ошибка кадрирования, не пишем новые данные, сообщаем
+    {
+        send_string_to_LCD_XY(frame_err, 0, 0);
+        string_to_USART (frame_err);
+        _delay_ms(1500);
+    }
+    else
+    {
+        temp = UDR0;
+        //if(!(temp == 0x0A || temp == 0x0D))
+        wr_err = UDR_to_RX_Ring(temp);// запрашиваем запись в кольцо и принимаем код успешности
+        if(wr_err == 1) //при ошибке переполнения выводим сообщение, данные в UDR_to_RX_Ring не записаны
+        {
+            send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
+            string_to_USART (rx_ring_ovf);
+            _delay_ms(1500);
+        }
+    }
 }
 
 //начало основой программы
@@ -1181,7 +1181,7 @@ int main(void)
     uint8_t srch_done = 0; // признак проведённой первичной дешифрации
     uint8_t chng_done = 0; // признак успешного изменения через UART
     uint8_t digits[N_DIGS]; //массив для передачи в utoa_fast_div для заполнения его кодами символов цифр температуры
-    uint8_t tmp[20]; //массив для выгрузки из кольцевого буфера
+    uint8_t msg[20]; //массив для выгрузки из кольцевого буфера
     int8_t *last_t = (void*) calloc(n_max, sizeof(*last_t));
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
@@ -1472,22 +1472,21 @@ int main(void)
                     if(GetData()) //пока идёт индикация проверяем кольцевой буфер
                     {
                         _delay_ms(100); //чтобы долетели остатки посылки
-                        lcd_clr(); // очистка дисплея
                         uint8_t num = RX_IndexNumber(); //сколько байт в кольцевом буфере
-                        RX_Ring_to_Str(tmp, num); //выгружаем из кольца в tmp
-                        lcd_clr();
+                        RX_Ring_to_Str(msg, num); //выгружаем из кольца в msg
+                        lcd_clr();// очистка дисплея
                         for(j=0; j < (num-1); j++) //выводим принятую команду на lcd
-                        {lcd_dat_XY(tmp[j], j, 0);}
+                        {lcd_dat_XY(msg[j], j, 0);}
                         _delay_ms(2000);
                         chng_done = 0; // обнуляем признак успешного выполнения команды
-                        if ((tmp[0]=='R')&&(tmp[1]=='E')&&(tmp[2]=='N')&&(tmp[3]==' '))
+                        if ((msg[0]=='R')&&(msg[1]=='E')&&(msg[2]=='N')&&(msg[3]==' '))
                         {
                             for (i = 0; i < n; i++)
                             {
                                 eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-                                if (!strncmp((void*)buffer.name, (void*)&tmp[4], sizeof(buffer.name)-1))
+                                if (!strncmp((void*)buffer.name, (void*)&msg[4], sizeof(buffer.name)-1))
                                 {
-                                    location = &tmp[12];
+                                    location = &msg[12];
                                     strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
                                     cli();
                                     eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
@@ -1502,17 +1501,17 @@ int main(void)
                                 _delay_ms(2000);
                             }
                         }
-                        else if ((tmp[0]=='T')&&((tmp[1]=='L')||(tmp[1]=='H'))&&(tmp[2]=='A')&&(tmp[3]=='L')&&(tmp[4]==' ')&&(tmp[4 + N_NAME]==' ')&&((tmp[5 + N_NAME]=='-')||(tmp[5 + N_NAME]=='+')))
+                        else if ((msg[0]=='T')&&((msg[1]=='L')||(msg[1]=='H'))&&(msg[2]=='A')&&(msg[3]=='L')&&(msg[4]==' ')&&(msg[4 + N_NAME]==' ')&&((msg[5 + N_NAME]=='-')||(msg[5 + N_NAME]=='+')))
                         {
-                            int8_t t_lim = atoi_fast (&tmp[5 + N_NAME]);
+                            int8_t t_lim = atoi_fast (&msg[5 + N_NAME]);
                             if ((t_lim >= -127) && (t_lim <= 127))
                             {
                                 for (i = 0; i < n; i++)
                                 {
                                     eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
-                                    if (!strncmp((void*)buffer.name, (void*)&tmp[5], sizeof(buffer.name)-1))
+                                    if (!strncmp((void*)buffer.name, (void*)&msg[5], sizeof(buffer.name)-1))
                                     {
-                                        if (tmp[1]=='L')
+                                        if (msg[1]=='L')
                                         {
                                             buffer.tmin = t_lim;
                                             cli();
@@ -1528,7 +1527,7 @@ int main(void)
                                             chng_done = 1;
                                             _delay_ms(1500);
                                         }
-                                        else if (tmp[1]=='H')
+                                        else if (msg[1]=='H')
                                         {
                                             buffer.tmax = t_lim;
                                             cli();
@@ -1555,15 +1554,15 @@ int main(void)
                             }
                             else send_string_to_LCD_XY (t_error, 0, 0);
                         }
-                        else if ((tmp[0]=='S')&&(tmp[1]=='M')&&(tmp[2]=='S')&&(tmp[3]==' ')&&(tmp[4]=='T')&&((tmp[5]=='L')||(tmp[5]=='H'))&&((tmp[6]=='1')||(tmp[6]=='0'))&&(tmp[7]==' '))
+                        else if ((msg[0]=='S')&&(msg[1]=='M')&&(msg[2]=='S')&&(msg[3]==' ')&&(msg[4]=='T')&&((msg[5]=='L')||(msg[5]=='H'))&&((msg[6]=='1')||(msg[6]=='0'))&&(msg[7]==' '))
                         {
                             for (i = 0; i < n; i++)
                             {
                                 eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
                                 eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));
-                                if (!strncmp((void*)buffer.name, (void*)&tmp[8], sizeof(buffer.name)-1))
+                                if (!strncmp((void*)buffer.name, (void*)&msg[8], sizeof(buffer.name)-1))
                                 {
-                                    if ((tmp[5]=='L')&&(tmp[6]=='1'))
+                                    if ((msg[5]=='L')&&(msg[6]=='1'))
                                     {
                                         buffer.flags.sms_T = 1;
                                         cli();
@@ -1580,7 +1579,7 @@ int main(void)
                                         chng_done = 1;
                                         _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='H')&&(tmp[6]=='1'))
+                                    else if ((msg[5]=='H')&&(msg[6]=='1'))
                                     {
                                         buffer.flags.sms_T = 1;
                                         cli();
@@ -1597,7 +1596,7 @@ int main(void)
                                         chng_done = 1;
                                         _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='L')&&(tmp[6]=='0'))
+                                    else if ((msg[5]=='L')&&(msg[6]=='0'))
                                     {
                                         buffer.flags.sms_T = 0;
                                         cli();
@@ -1614,7 +1613,7 @@ int main(void)
                                         chng_done = 1;
                                         _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='H')&&(tmp[6]=='0'))
+                                    else if ((msg[5]=='H')&&(msg[6]=='0'))
                                     {
                                         buffer.flags.sms_T = 0;
                                         cli();
@@ -1639,7 +1638,7 @@ int main(void)
                                 _delay_ms(2000);
                             }
                         }
-                        else if ((tmp[0]=='A')&&(tmp[1]=='L')&&(tmp[2]=='L')&&(tmp[3]==' ')&&(tmp[4]=='T'))
+                        else if ((msg[0]=='A')&&(msg[1]=='L')&&(msg[2]=='L')&&(msg[3]==' ')&&(msg[4]=='T'))
                         {
                             for (i=0; i<n; i++)
                             {
