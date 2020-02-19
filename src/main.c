@@ -27,10 +27,10 @@
 
 //блок разных define
 #define N_DIGS 5						// размер массива цифр для преобразовании числа в строку для LCD, определяется размерностью максимального выводимого на LCD числа +1 для завершающего 0
-#define N_NAME 8						//размер массива для имени устройства
+#define N_NAME 8						// размер массива для имени устройства
 #define EEP_MEM 1024					// объём епром для вычисления адреса последней и предпоследней ячейки, также для определения максимального количества устройств в епром
 #define IND_PAUSE 120 					// пауза на индикацию очередного кадра, 2с
-#define WAIT_LIM 900 					//пауза для ожидания действий пользователя, 15с
+#define WAIT_LIM 900 					// пауза для ожидания действий пользователя, 15с
 
 //блок define для инициализации кнопки
 #define SRC_PORT PORTB					// Порт, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
@@ -61,7 +61,7 @@
 #define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
 
 //блок define для работы с модемом
-#define SMS_SIZE			25					// ограничение длины исходящих смс
+//#define SMS_SIZE			25					// ограничение длины исходящих смс
 #define QUEUE_SIZE			16					// размер кольца очереди обработчиков
 #define INC_TASK_SIZE		8 					// размер кольца задач на чтение смс
 #define OUT_TASK_SIZE		4					// размер кольца задач на отправку смс
@@ -118,7 +118,7 @@ unsigned char sms_send []		PROGMEM = "SMS";				// часть строки при подтверждении
 unsigned char on []				PROGMEM = "ВКЛ.";
 unsigned char off []			PROGMEM = "ОТК.";
 unsigned char blank []			PROGMEM = " ";
-unsigned char crash []			PROGMEM = "АВАРИЯ!";
+unsigned char crash []			PROGMEM = "FAIL!";
 unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";
 unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";
 unsigned char quick[]			PROGMEM = "QUICK";
@@ -231,6 +231,13 @@ typedef struct	//структура трекинга работы обработчиков
     uint8_t flag_8 : 1;	// резерв
 }tracker;
 
+typedef struct	//структура содержимого смс
+{
+    uint8_t sms_type;					// вариант шаблона смс
+    uint8_t dev_num;					// номер устройства
+    int8_t param;						// параметр, пока только температура из массива результатов измерений
+}sms_mask;
+
 typedef struct 	//структура задачи приёма смс, 4 байта
 {
     tracker step;						// Флаги процесса
@@ -240,7 +247,7 @@ typedef struct 	//структура задачи приёма смс, 4 байта
 typedef struct //структура задачи отправки смс, 21 байт, снизить до 8 через передачу сюда № устройства, указателей (части строк смс) и массива символов (текущее значение параметра).
 {
     tracker step;						// Флаги процесса
-    uint8_t sms_txt [SMS_SIZE]; 		// Массив для записи текста смс для отправки
+    sms_mask sms_txt; 					// Массив для записи текста смс для отправки
 }out_task;
 
 typedef struct //структура задачи отправки команд в модем, 5 байт
@@ -250,6 +257,7 @@ typedef struct //структура задачи отправки команд в модем, 5 байт
     uint8_t* par;						// указатель на параметр AT-команды
 }cmd_task;
 
+sms_mask sms_buff;						// буфер для текста смс
 volatile unsigned char pause_cnt;		// счётчик паузы после приёма последнего байта в кольцо приёмника
 volatile unsigned char msg_upld; 		// флаг окончания новой посылки от модема и разрешения выгрузки в из кольца приемника в msg
 volatile unsigned char modem_rdy;		// флаг готовности модема
@@ -261,6 +269,7 @@ uint8_t msg[MSG_SIZE]; 					// массив для выгрузки из кольцевого буфера     	###
 uint8_t todo_txt [TODO_MAX];			// массив для выгрузки текста команды контроллеру	#############
 uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа модема на запросы ( "ОК", ">" и пр.)
 enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
+enum {FAIL, ALARM, DONE, ALL, TEST1, TEST2};			// варианты значений для типов смс
 tracker RESET;							// создаём битовое поле для флагов инициализаци модема
 
 //	блок переменных и массивов для работы с USART
@@ -285,7 +294,7 @@ uint8_t send_sms (void);					//объявляем HANDLER отправки смс
 uint8_t parser(void);						//объявляем HANDLER разбора текста
 uint8_t send_cmd (void);					//объявляем HANDLER отправки команды в модем
 void inc_to_queue(uint8_t*);				//объявляем функцию постановки в очередь задачи чтения смс
-void out_to_queue(uint8_t*);				//объявляем функцию постановки в очередь задачи отправки смс
+void out_to_queue(sms_mask*);				//объявляем функцию постановки в очередь задачи отправки смс
 void cmd_to_queue(uint8_t*, uint8_t*);		//объявляем функцию постановки в очередь задачи отправки команды в модем
 void to_do(void);							//объявляем функцию разбора и выполнения команд из текста смс
 
@@ -1127,7 +1136,9 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
 
 uint8_t send_sms (void)	//HANDLER отправки смс
 {
-    uint8_t cmd[26];	//временный массив текста команды
+    uint8_t cmd[26];		// временный массив текста команды
+    uint8_t name[N_NAME];	// временный массив имени устройства
+    uint8_t k = 0;			// переменная номера устройства
     if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
     {
         strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
@@ -1145,14 +1156,34 @@ uint8_t send_sms (void)	//HANDLER отправки смс
     {
         if (mod_ans == INVITE)	//если в msg есть ">"
         {
-            strcat_P ((char*)WR_SMS[out_task_T].sms_txt, (PGM_P) CTRL_Z); //обеспечить \0 в конце текста смс в .sms_txt!!!
-            arr_to_TX_Ring (WR_SMS[out_task_T].sms_txt);
-            ans_lim = 600;							//время ожидания ответа 10с
-            UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
-            ans_cnt = 0;							//запускаем таймер ответа
-            WR_SMS[out_task_T].step.flag_1 = 0;		//сброс флага "запрос на передачу смс отправлен в модем"
-            WR_SMS[out_task_T].step.flag_2 = 1;		//подъём флага "тескт смс отправлен в модем"
-            mod_ans = 0;							//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            uint8_t sms_type = WR_SMS[out_task_T].sms_txt.sms_type;
+            switch (sms_type)
+            {
+                case FAIL:
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;				//копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);//читаем имя устройства во временный массив
+                    arr_to_TX_Ring (name);			// шлём в кольцо имя
+                    string_to_TX_Ring (blank);		// шлём в кольцо пробел
+                    string_to_TX_Ring (crash);		// шлём в кольцо АВАРИЯ!
+                    break;
+                case TEST1:
+                    string_to_TX_Ring (quick);
+                    break;
+                case TEST2:
+                    string_to_TX_Ring (slow);
+                default:							// если ни один случай не отработал
+                    // string_to_TX_Ring (sms_send);	// пока шлём текст SMS АВАРИЯ!
+                    // string_to_TX_Ring (crash);
+                    // string_to_TX_Ring (CTRL_Z);		// обеспечить \0 в конце текста смс в .sms_txt!!!
+                    break;
+            }
+            string_to_TX_Ring (CTRL_Z);				// обеспечить \0 в конце текста смс в .sms_txt!!!
+            ans_lim = 600;							// время ожидания ответа 10с
+            UCSR0B |= (1<<UDRIE0);					// разрешение прерывания по опустошению UDR передатчика
+            ans_cnt = 0;							// запускаем таймер ответа
+            WR_SMS[out_task_T].step.flag_1 = 0;		// сброс флага "запрос на передачу смс отправлен в модем"
+            WR_SMS[out_task_T].step.flag_2 = 1;		// подъём флага "тескт смс отправлен в модем"
+            mod_ans = 0;							// обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
             return 'B';
         }
 #ifdef DEBUG
@@ -1361,11 +1392,13 @@ void inc_to_queue (uint8_t* arr)	//постановка в очередь задачи чтения смс
     }
 }
 
-void out_to_queue (uint8_t* str)	//постановка в очередь задачи отправки смс
+void out_to_queue (sms_mask *str)	//постановка в очередь задачи отправки смс
 {
     if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((out_task_H + 1) & OUT_TASK_IND_MSK) != out_task_T)) 	//если голова не догнала хвост
     {
-        strcpy_P ((char*)WR_SMS[out_task_H].sms_txt, (PGM_P)str);	//копируем текст смс в структуру задачи
+        WR_SMS[out_task_H].sms_txt.sms_type = str->sms_type;		//копируем информацию о содержании смс в структуру задачи
+        WR_SMS[out_task_H].sms_txt.dev_num = str->dev_num;
+        WR_SMS[out_task_H].sms_txt.param = str->param;
         //обнуляем флаги процесса
         WR_SMS[out_task_H].step.flag_1 = WR_SMS[out_task_H].step.flag_2 = WR_SMS[out_task_H].step.flag_3 = WR_SMS[out_task_H].step.flag_4
                 = WR_SMS[out_task_H].step.flag_5 = WR_SMS[out_task_H].step.flag_6 = WR_SMS[out_task_H].step.flag_7 = WR_SMS[out_task_H].step.flag_8 = 0;
@@ -1420,7 +1453,9 @@ void to_do (void) //тестовый модуль разбора и выполнения команды
 {
     if (todo_txt[0]=='r' && todo_txt[1]=='e' && todo_txt[2]=='q' && todo_txt[3]=='u' && todo_txt[4]=='e' && todo_txt[5]=='s' && todo_txt [6] == 't')
     {
-        out_to_queue ((uint8_t*)(PSTR("answer")));
+        // out_to_queue ((uint8_t*)(PSTR("answer")));
+        sms_buff.sms_type = TEST2;
+        out_to_queue (&sms_buff);
     }
     else
     {
@@ -2195,6 +2230,10 @@ int main (void)
                         send_arr_to_LCD_XY(buffer.name, 0, 0); 	//извещаем пользователя об аварии
                         send_string_to_LCD (blank);
                         send_string_to_LCD (crash);
+                        sms_buff.sms_type = FAIL;				//записываем в буферную структуру тип смс
+                        sms_buff.dev_num = i;					//записываем в буферную структуру номер аварийного устройства
+                        sms_buff.param = 0;						//обнуляем параметр, здесь не нужен
+                        out_to_queue (&sms_buff);				//ставим задачу на отправку смс
                         _delay_ms(1500);
                     }
                 }
@@ -2405,7 +2444,8 @@ int main (void)
             {
                 case QUICK :
                 {
-                    out_to_queue (quick);	//отправляем текст QUICK
+                    sms_buff.sms_type = TEST1;
+                    out_to_queue (&sms_buff);	//отправляем текст QUICK
                     lcd_clr(); 				//очистка дисплея
                     send_string_to_LCD_XY(quick, 0, 0);
                     press_time = 0;
@@ -2413,7 +2453,7 @@ int main (void)
                 }
                 case SLOW :
                 {
-                    out_to_queue (slow);	//отправляем текст SLOW
+                    //out_to_queue (slow);	//отправляем текст SLOW
                     lcd_clr();				// очистка дисплея
                     send_string_to_LCD_XY (slow, 0, 0);
                     press_time = 0;
