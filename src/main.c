@@ -44,6 +44,11 @@
 #define RELEASED 0 //состояние кнопки - отпущена
 #define PRESSED 1 //состояние кнопки - нажата
 
+// блок define для светодиода индмкации gsm уровня
+#define LED_PORT PORTB //Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define DDR_LED_PORT DDRB // Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define LED_PIN_NUM 5 // Номер PIN, к которому подключен светодиод, для макроса _BV()
+
 //блок define для GSM
 #define MYUBRR 103 // скорость usart 9600
 #define RING_SIZE 256 // размер буфера берём 256, чтобы пока обойтись без маски при переходе через 255->0
@@ -79,10 +84,15 @@ unsigned char com_error[] PROGMEM = "Неверная команда"; //сообщение при ошибке в
 unsigned char name_error_ren[] PROGMEM = "Неверное имя REN"; //сообщение при ошибкочном имени в тексте команды
 unsigned char name_error_al[] PROGMEM = "Неверное имя AL"; //сообщение при ошибкочном имени в тексте команды
 unsigned char name_error_sms[] PROGMEM = "Неверное имя SMS"; //сообщение при ошибкочном имени в тексте команды
-unsigned char t_min[] PROGMEM = " Tmin "; // часть строки при подтверждении изменения минимального порогоа температуры
-unsigned char t_max[] PROGMEM = " Tmax "; // часть строки при подтверждении изменения максимального порога температуры
-unsigned char t_low[] PROGMEM = " T<";  // часть строки при сообщениии о снижении температуры ниже минимального порога
-unsigned char t_high[] PROGMEM = " T>";   // часть строки при сообщениии о повышении температуры выше максимального порога
+unsigned char t_min[] PROGMEM = "Tmin"; // часть строки при подтверждении изменения минимального порогоа температуры
+unsigned char t_max[] PROGMEM = "Tmax"; // часть строки при подтверждении изменения максимального порога температуры
+unsigned char t_low[] PROGMEM = "T<";  // часть строки при сообщениии о снижении температуры ниже минимального порога
+unsigned char t_high[] PROGMEM = "T>";   // часть строки при сообщениии о повышении температуры выше максимального порога
+unsigned char sms_send []PROGMEM = "SMS";  // часть строки при подтверждении включения sms о выходе температуры за пределы
+unsigned char on []PROGMEM = "ВКЛ.";
+unsigned char off []PROGMEM = "ОТК.";
+unsigned char blank []PROGMEM = " ";
+unsigned char crash []PROGMEM = "АВАРИЯ!";
 
 // блок глобальных переменных и структур
 typedef struct //битовое поле для флагов
@@ -92,9 +102,9 @@ typedef struct //битовое поле для флагов
     uint8_t ht_alarm : 1; // верхний порог температуры превышен
     uint8_t line_alarm : 1; //признак пропадания в процессе измерений
     uint8_t sms_T : 1; //отправить sms при Т < tmin или Т > tmax
-    uint8_t heat_on : 1; //включить нагрев при Т < tmin
-    uint8_t cool_on : 1; //включить что-либо при Т > tmax
-    uint8_t reserved_7 : 1;
+    uint8_t relay_1 : 1; //реле 1
+    uint8_t relay_2 : 1; //реле 2
+    uint8_t reserved : 1;//свободный
 } bit_set;
 
 typedef struct //структура для параметров устройства
@@ -127,6 +137,10 @@ uint8_t scratchpad [9]; //массив байтов, прочитанных из блокнота DS18B20
 volatile uint8_t IndexIN;// входящий индекс кольцевого буфера, здесь обязательно volatile, меняется только в прерывании
 volatile uint8_t IndexOUT; // выходящий индекс кольцевого буфера
 volatile uint8_t ring[RING_SIZE]; //массив для кольцевого буфера
+volatile uint8_t flash_cnt; //счётчик прерываний для индикации уровня gsm вспышками диода
+volatile uint8_t flash_num; //число прошедших вспышек
+volatile uint8_t pause_num; //число прошедших отрезков пауз между сериями вспышек
+const uint8_t gsm_lvl = 6; //уровень gsm сигнала, пока const
 
 typedef struct // структура для строки дисплея, из них строится кадр (экран)
 {
@@ -638,9 +652,9 @@ void search_ID(void)
         buffer.flags.ht_alarm = 0;
         buffer.flags.line_alarm =0;
         buffer.flags.sms_T = 0;
-        buffer.flags.heat_on = 0;
-        buffer.flags.cool_on = 0;
-        buffer.flags.reserved_7 =0;
+        buffer.flags.relay_1 = 0;
+        buffer.flags.relay_2 = 0;
+        buffer.flags.reserved =0;
         cli();
         eeprom_update_block (&buffer, &ee_arr[n-1], sizeof(buffer)); // записываем в епром описание текущего 1W устройства.
         sei();
@@ -957,9 +971,9 @@ void add_ID(void) // режим удаления/добавления/вставки устройств
                     buffer.flags.ht_alarm = 0;
                     buffer.flags.line_alarm =0;
                     buffer.flags.sms_T = 0;
-                    buffer.flags.heat_on = 0;
-                    buffer.flags.cool_on = 0;
-                    buffer.flags.reserved_7 =0;
+                    buffer.flags.relay_1 = 0;
+                    buffer.flags.relay_2 = 0;
+                    buffer.flags.reserved =0;
                     cli();
                     eeprom_update_block (&buffer, &ee_arr[n], sizeof(buffer)); // записываем в конец списка в епром описание текущего 1W устройства.
                     sei();
@@ -1055,6 +1069,27 @@ ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
         int_cnt = 0; //начинаем новый отсчёт
     }
     delay_cnt++; //счётчик задержки 2c для индикации, проверяется после отправки очередных символов на экран, сбрасывается в main
+    flash_cnt++; //счётчик для вспышек индикации уровня сигнала
+    if (flash_cnt == 10)
+    {
+        flash_cnt = 0;
+        if (!pause_num)
+        {
+            if (flash_num++ < gsm_lvl)
+                PORTB ^= _BV(LED_PIN_NUM);
+            else
+            {
+                flash_num = 0;
+                pause_num++;
+                PORTB &= ~_BV(LED_PIN_NUM);
+            }
+        }
+        else
+        {
+            if (pause_num++ >= 16)
+                pause_num = 0;
+        }
+    }
     //time_gsm++; //счётчик интервалов 30c запросов GSM, сбрасываается в main
 }
 
@@ -1098,6 +1133,8 @@ int main(void)
     LCD_DAT_PORT = 0x00;// ставим 0 в порт данных и команд ЖКИ
     _delay_ms(200); // Ожидание готовности ЖКИ
     lcd_init(); // Инициализация дисплея
+
+    DDR_LED_PORT |= _BV(LED_PIN_NUM); //ставим 1 - пин led активирован на выход
 
     USART_Init(MYUBRR); //включаем UART
     ClearRing();	// Сбросить буфер
@@ -1170,16 +1207,6 @@ int main(void)
         n = eeprom_read_byte((uint8_t*)dev_qty); //читаем количество датчиков, записанных в епром
         for (i = 0; i< n; i++) //начинаем опрос с первого датчика (от 0)
         {
-            /*if(GetData()) //если есть что-то в кольцевом буфере
-            {
-                _delay_ms(100); //чтобы долетели остатки посылки
-                lcd_clr(); // очистка дисплея
-                uint16_t num = IndexNumber(); //сколько байт в кольцевом буфере
-                Ring_to_Str(tmp,num); //выгружаем из кольца в tmp
-                for(uint8_t j=0; j < (num-1); j++)
-                    {lcd_dat_XY(tmp[j], j, 0);}
-                _delay_ms(1000);
-            }*/
             eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства из епром
             if (buffer.flags.active)//если флаг присутствия поднят, запрашиваем температуру
             {
@@ -1216,6 +1243,13 @@ int main(void)
                 // преобразуем полученное в значение температуры
                 if (!(temperature[4] == 0xFF)) //если конф.байт станет вдруг ==FF, то датчик замолчал.
                 {
+                    if (buffer.flags.line_alarm) //сбрасываем флаг пропадания, если он был поднят в каком-то предыдущем цикле? а датчик проявился
+                    {
+                        buffer.flags.line_alarm = 0;
+                        cli();
+                        eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags)); //записываем флаги в епром
+                        sei();
+                    }
                     if ((temperature[1]&0b10000000) == 0) // проверка на отрицательность температуры
                         temp_sign =0; //рисуем плюс на ЖКИ
                     else //переводим из доп.кода в прямой
@@ -1237,10 +1271,11 @@ int main(void)
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                         sei();
-                        if (buffer.flags.sms_T)
+                        if (buffer.flags.sms_T) //если установлен флаг отправки sms, отправляем на lcd
                         {
                             lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
+                            send_string_to_LCD (blank);
                             send_string_to_LCD (t_low);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
                             send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
@@ -1253,10 +1288,11 @@ int main(void)
                         cli();
                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                         sei();
-                        if (buffer.flags.sms_T)
+                        if (buffer.flags.sms_T) //если установлен флаг отправки sms, отправляем на lcd
                         {
                             lcd_clr();
                             send_arr_to_LCD_XY (buffer.name, 0, 0);
+                            send_string_to_LCD (blank);
                             send_string_to_LCD (t_high);
                             lcd_dat (((buffer.tmin & 0b10000000) ? '-' : '+'));
                             send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
@@ -1311,7 +1347,18 @@ int main(void)
                 }
                 else //если датчик вдруг замолчал, на дисплей шлём ---.-
                 {
-                    buffer.flags.line_alarm = 1;
+                    if (!buffer.flags.line_alarm) //поднимаем флаг пропадания, если он не был поднят в каком-то предыдущем цикле
+                    {
+                        buffer.flags.line_alarm = 1;
+                        cli();
+                        eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags)); //записываем флаги в епром
+                        sei();
+                        lcd_clr();
+                        send_arr_to_LCD_XY(buffer.name, 0, 0); //извещаем пользователя об аварии
+                        send_string_to_LCD (blank);
+                        send_string_to_LCD (crash);
+                        _delay_ms(1500);
+                    }
                     Dig_1 = '-';
                     Dig_2 = '-';
                     Dig_3 = '-';
@@ -1379,7 +1426,9 @@ int main(void)
                                 {
                                     location = &tmp[12];
                                     strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
+                                    cli();
                                     eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
+                                    sei();
                                     chng_done = 1;
                                 }
                             }
@@ -1390,7 +1439,7 @@ int main(void)
                                 _delay_ms(2000);
                             }
                         }
-                        else if ((tmp[0]=='T')&&((tmp[1]=='L')||(tmp[1]=='H'))&&(tmp[2]=='A')&&(tmp[3]=='L')&&(tmp[4]=='_')&&(tmp[4 + N_NAME]==' ')&&((tmp[5 + N_NAME]=='-')||(tmp[5 + N_NAME]=='+')))
+                        else if ((tmp[0]=='T')&&((tmp[1]=='L')||(tmp[1]=='H'))&&(tmp[2]=='A')&&(tmp[3]=='L')&&(tmp[4]==' ')&&(tmp[4 + N_NAME]==' ')&&((tmp[5 + N_NAME]=='-')||(tmp[5 + N_NAME]=='+')))
                         {
                             int8_t t_lim = atoi_fast (&tmp[5 + N_NAME]);
                             if ((t_lim >= -127) && (t_lim <= 127))
@@ -1408,10 +1457,13 @@ int main(void)
                                             sei();
                                             lcd_clr();
                                             send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                            send_string_to_LCD (blank);
                                             send_string_to_LCD (t_min);
+                                            send_string_to_LCD (blank);
                                             lcd_dat ((buffer.tmin & 0b10000000) ? '-' : '+');
-                                            send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? buffer.tmin : (~buffer.tmin) + 1), digits));
+                                            send_arr_to_LCD (utoa_fast_div (((buffer.tmin & 0b10000000) ? ((~buffer.tmin) + 1) : buffer.tmin), digits));
                                             chng_done = 1;
+                                            _delay_ms(1500);
                                         }
                                         else if (tmp[1]=='H')
                                         {
@@ -1421,10 +1473,13 @@ int main(void)
                                             sei();
                                             lcd_clr();
                                             send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                            send_string_to_LCD (blank);
                                             send_string_to_LCD (t_max);
+                                            send_string_to_LCD (blank);
                                             lcd_dat ((buffer.tmax & 0b10000000) ? '-' : '+');
-                                            send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? buffer.tmax : (~buffer.tmax) + 1), digits));
+                                            send_arr_to_LCD (utoa_fast_div (((buffer.tmax & 0b10000000) ? ((~buffer.tmax) + 1) : buffer.tmax), digits));
                                             chng_done = 1;
+                                            _delay_ms(1500);
                                         }
                                     }
                                 }
@@ -1451,31 +1506,66 @@ int main(void)
                                         cli();
                                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                                         sei();
+                                        lcd_clr();
+                                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                        send_string_to_LCD_XY (t_low, 0, 1);
+                                        send_string_to_LCD(t_min);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (sms_send);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (on);
                                         chng_done = 1;
+                                        _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='H')&&(tmp[6]='1'))
+                                    else if ((tmp[5]=='H')&&(tmp[6]=='1'))
                                     {
                                         buffer.flags.sms_T = 1;
                                         cli();
                                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                                         sei();
+                                        lcd_clr();
+                                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                        send_string_to_LCD_XY (t_high, 0, 1);
+                                        send_string_to_LCD (t_max);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (sms_send);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (on);
                                         chng_done = 1;
+                                        _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='L')&&(tmp[6]='0'))
+                                    else if ((tmp[5]=='L')&&(tmp[6]=='0'))
                                     {
                                         buffer.flags.sms_T = 0;
                                         cli();
                                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                                         sei();
+                                        lcd_clr();
+                                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                        send_string_to_LCD_XY (t_low, 0, 1);
+                                        send_string_to_LCD(t_min);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (sms_send);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (off);
                                         chng_done = 1;
+                                        _delay_ms(1500);
                                     }
-                                    else if ((tmp[5]=='H')&&(tmp[6]='0'))
+                                    else if ((tmp[5]=='H')&&(tmp[6]=='0'))
                                     {
                                         buffer.flags.sms_T = 0;
                                         cli();
                                         eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof buffer.flags); //записываем флаги в епром
                                         sei();
+                                        send_arr_to_LCD_XY(buffer.name, 0, 0);
+                                        send_string_to_LCD_XY (t_high, 0, 1);
+                                        send_string_to_LCD(t_max);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (sms_send);
+                                        send_string_to_LCD (blank);
+                                        send_string_to_LCD (off);
                                         chng_done = 1;
+                                        _delay_ms(1500);
                                     }
                                 }
                             }
