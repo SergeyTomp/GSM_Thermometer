@@ -31,41 +31,47 @@
 #define SRC_PIN_NUM 1 // Номер PIN, к которому подключена кнопка, для макроса _BV()
 #define src_msk 0x02 // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
 
-//unsigned char tempC[] PROGMEM = "Темп-ра ";
-unsigned char absence[] PROGMEM = "Нет датчиков";
-unsigned char error[] PROGMEM = "ошибка иниц.";
-unsigned char present_n[] PROGMEM = "Подкл.дат. ";
-unsigned char init_n[] PROGMEM = "Иниц.дат. ";
-unsigned char no_answer[] PROGMEM = "Нет ответа датч. ";
+// блок текстовых сообщений во флэш
+unsigned char absence[] PROGMEM = "Нет датчиков"; //ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
+unsigned char no_answer[] PROGMEM = "Нет ответа датч."; //ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
+unsigned char present_n[] PROGMEM = "Подкл.дат. "; //количество датчиков, опознанных при первичной дешифрации адресов
+unsigned char dev_excess[] PROGMEM = "Много датчиков"; //ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
+unsigned char error[] PROGMEM = "Ошибка иниц."; //ошибка на этапе проверки CRC после первичной дешифрации адресов, выводится № датчика,
+unsigned char init_n[] PROGMEM = "Иниц.дат. "; //количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
+unsigned char init_srch[] PROGMEM = "Выполните поиск"; // ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
+unsigned char scratch_err[] PROGMEM = "Ошибка блокн. "; //ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
+unsigned char no_answer_n[] PROGMEM = "Нет ответа "; //ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится № датчика
+unsigned char ow_check[] PROGMEM = "Опрос линии";
+
+// блок глобальных переменных и структур
 unsigned char temp_sign; // признак знака температуры для ф-ции вывода на ЖКИ
-
-
 typedef struct //структура для параметров устройства
 {
     unsigned char name[8]; // имя 1W устройства
     unsigned char code[8]; // код 1W устройства
     char tmax; // максимальная Т
     char tmin; // минимальная Т
+    char flags;// флаги состояния
 } device; // структура для параметров 1W устройства
 
 device buffer; // переменная для обмена озу <-> епром
 device ee_arr [2] EEMEM; // oбъявляем массив структур в епром, 2 - пока временно, для начала
 unsigned char *location; //переменная для имени 1W устройств - задаётся юзером вместо имени по умолчанию
-unsigned char dev_num = 0x00; //переменная порядкового номера для добавления к имени 1W устройств по умолчанию,
-unsigned char dev_name[8] = {'D', 'x', 'x', 'x', 'x', 'x', 'x', 'x'}; //"D__" - имя устройства по умолчанию, к нему добавится ASCII код порядкового номера
-//unsigned char dev_qty EEMEM;
-const uint16_t dev_qty = 0x3FF;//константа, содержащая значение адреса последней ячейки в епром для переменной количества найденных устройств
+unsigned char dev_num = 0x00; //переменная порядкового номера для добавления к имени 1W устройств по умолчанию, отличается от счётчика n в функции поиска только (dev_num - 1) == n, можно без неё.
+unsigned char dev_name[8] = {'D', 'x', 'x', 'x', 'x', 'x', 'x', 'x'}; //"Dxxxxxx" - имя устройства по умолчанию, к нему добавится ASCII код порядкового номера
+const uint16_t dev_qty = 0x3FF;//константа, содержащая значение адреса последней ячейки в епром для переменной количества дешифрованных устройств
+uint8_t scratchpad [9]; //массив байтов, прочитанных из блокнота DS18B20
 
-typedef struct // структура для строки дисплея
+typedef struct // структура для строки дисплея, из них строится кадр (экран)
 {
     uint8_t name[8]; //имя устройства
-    short unsigned int dig_1;//первая цифра температуры
-    short unsigned int dig_2;//вторая цифра температуры
-    short unsigned int dig_3;//десятичная цифра температуры
+    unsigned int dig_1;//первая цифра температуры
+    unsigned int dig_2;//вторая цифра температуры
+    unsigned int dig_3;//десятичная цифра температуры
     unsigned char sign; //знак температуры
 } line;
-line line_up; // верхняя строка
-line line_dn; // нижняя строка
+line line_up; // верхняя строка кадра
+line line_dn; // нижняя строка кадра
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -161,36 +167,53 @@ void lcd_init(void)
 // функция выводит знаки на LCD, вызывается из Disp_prep
 void Display (uint8_t line_qty)
 {
-    if (!line_qty) //если строка только одна (верхняя) - чистим дисплей
+    if (!line_qty) //если строка только одна (верхняя) - чистим дисплей, но выводим первую строку в любом случае
     {
         lcd_com(0x01); // очистка дисплея
         _delay_us(1500);// время выполнения очистки не менее 1.5ms
     }
-    //выводим первую строку в любом случае
     lcd_com(0x80); // выводим имя в 1-ю верхнюю левую позицию 1 строки экрана
     send_arr_to_LCD (line_up.name); //выводим имя устройства
     lcd_com(0x88); // выводим температуру в 8-ю (от 0) позицию 1 строки экрана
+    switch (line_up.sign)
+    {
+        case 0 : lcd_dat('+');
+            break;
+        case 1 : lcd_dat('-');
+            break;
+        case 0x0F : lcd_dat('?');
+            break;
+    }
+    /*
     if (!line_up.sign)
-    {lcd_dat('+');}
+        {lcd_dat('+');}
     else
-    {lcd_dat('-');}
-
+        {lcd_dat('-');}
+    }*/
     lcd_dat(line_up.dig_1 + '0');
     lcd_dat(line_up.dig_2 + '0');
     lcd_dat('.');
     lcd_dat(line_up.dig_3 + '0');
 
-    //выводим вторую строку, если она есть
-    if (line_qty)
+    if (line_qty)	//выводим вторую строку, если она есть
     {
         lcd_com(0xC0); // выводим строку в 1-ю верхнюю левую позицию 2 строки экрана
         send_arr_to_LCD (line_dn.name); //выводим имя устройства
         lcd_com(0xC8); // выводим температуру в 8-ю (от 0) позицию 2 строки экрана
-        if (!line_up.sign)
-        {lcd_dat('+');}
+        switch (line_dn.sign)
+        {
+            case 0 : lcd_dat('+');
+                break;
+            case 1 : lcd_dat('-');
+                break;
+            case 0x0F : lcd_dat('?');
+                break;
+        }
+        /*if (!line_dn.sign)
+            {lcd_dat('+');}
         else
-        {lcd_dat('-');}
-
+            {lcd_dat('-');}
+        */
         lcd_dat(line_dn.dig_1 + '0');
         lcd_dat(line_dn.dig_2 + '0');
         lcd_dat('.');
@@ -198,14 +221,14 @@ void Display (uint8_t line_qty)
     }
 }
 
-// Функция выделяет цифры из трехзначного числа Number,
+// Функция подготовки кадра (вызывается из main):
+// выделяет цифры из трехзначного числа Number,
 // распределяет вывод целого и десятичного заначения по символам,
 // заполняет массив строк для индикации на LCD
-// вызывается из main
 void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
 {
-    short unsigned int j=0;
-    short unsigned int Num1, Num2, Num3;
+    unsigned int j=0;
+    unsigned int Num1, Num2, Num3;
     Num1=Num2=0;
     while (Number >= 100)
     {
@@ -226,13 +249,23 @@ void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
             line_up.name[j] = buffer.name[j];
             j++;
         }
-        line_up.dig_1 = Num1;
-        line_up.dig_2 = Num2;
-        line_up.dig_3 = Num3;
-        line_up.sign = temp_sign;
+        if (buffer.flags)
+        {
+            line_up.dig_1 = Num1;
+            line_up.dig_2 = Num2;
+            line_up.dig_3 = Num3;
+            line_up.sign = temp_sign;
+        }
+        else
+        {
+            line_up.dig_1 = 0x0F; // при прибавлении кода символа "0" (d48)в функции Display() получим код символа "?" на дисплее вместо цифр
+            line_up.dig_2 = 0x0F;
+            line_up.dig_3 = 0x0F;
+            line_up.sign = 0x0F;
+        }
         if (!(i & 0x01) && (i==(n-1))) //если строка верхняя, но последняя, сразу вывод на LCD
         {
-            Display (0); // передаём в функцию вывода кол-во строк 0->1, 1->2
+            Display (0); // передаём в функцию вывода кол-во строк кадра: 0->1 строка, 1->2 строки
         }
     }
     else
@@ -242,11 +275,21 @@ void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
             line_dn.name[j] = buffer.name[j];
             j++;
         }
-        line_dn.dig_1 = Num1;
-        line_dn.dig_2 = Num2;
-        line_dn.dig_3 = Num3;
-        line_up.sign = temp_sign;
-        Display (1);// передаём в функцию вывода кол-во строк 0->1, 1->2
+        if (buffer.flags)
+        {
+            line_dn.dig_1 = Num1;
+            line_dn.dig_2 = Num2;
+            line_dn.dig_3 = Num3;
+            line_dn.sign = temp_sign;
+        }
+        else
+        {
+            line_dn.dig_1 = 0x0F; // при прибавлении '0' (0d48) в функции Display() получим символ "?"
+            line_dn.dig_2 = 0x0F;
+            line_dn.dig_3 = 0x0F;
+            line_dn.sign = 0x0F;
+        }
+        Display (1);// передаём в функцию вывода кол-во строк кадра: 0->1 строка, 1->2 строки
     }
 }
 
@@ -362,23 +405,21 @@ int8_t CRC_check(uint8_t *data, uint8_t crcbitN)
     else
         return 1;
 }
-// Функция поиска устройств, запись в еепром, проверка CRC кодов найденных устройств
+// Функция поиска устройств, запись в еепром
 void search_ID(void)
 {
     unsigned char i, j = 0;// переменные счетчики
-    unsigned char n = 0;  //количество датчиков, записанных в епром
+    unsigned char n = 0;  //количество датчиков, записанных в епром, она же переменная одного входа в цикл поиска всех датчиков
+    unsigned char m = 0; //количество датчиков, прошедших проверку CRC8
     unsigned char data [8];// буфер-массив для хранения кодов датчиков
-    //unsigned char u;//переменная для счетчика в блоке проверки CRC8
-    //unsigned char data_crc;// переменная, которой присваивается байт данных в блоке проверки CRC8
-    //unsigned char crc8 = 0; //переменная для вычисления CRC8 в блоке проверки CRC8
 
     sei();// либо SREG |= (1 << 7); разрешить общее прерыввание
-    if (n == 0) //переменная, одного входа в цикл поиска всех датчиков
+    if (n == 0)
     {
         unsigned char p = 1;  //переменная для цикла считыввания кода
         unsigned char bit = 0x01;// начальная позиция бита
-        unsigned char New_conflict = 0; //переменная для нвой позиции бита
-        unsigned char last_conflict = 0;  //переменная для старой позиции бита
+        unsigned char New_conflict = 0; //переменная для новой позиции бита конфликта
+        unsigned char last_conflict = 0;  //переменная для старой позиции бита конфликта
 
         for (j = 0; j < 8; j++) //обнулим буфер-массив
         {
@@ -391,6 +432,13 @@ void search_ID(void)
         {
             New_conflict = 0;
             n++;
+            if (n > 50) //если число устройств превысило 50, не влезет в епром
+            {
+                lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+                send_string_to_LCD (dev_excess);//выводим "много датчиков"
+                abort ();
+            }
+
             if (!init_device())	// выдаём импульс сброса и проверяем ответ датчиков
             {
                 // если ф-ция сброса вернёт 0
@@ -471,9 +519,10 @@ void search_ID(void)
             {
                 buffer.code[j] = data[j];
             }
-            /* заполняем поля tmax и tmin буфера значениями */
+            /* заполняем поля tmax, tmin и flags буфера значениями */
             buffer.tmax = 30;
             buffer.tmin = 6;
+            buffer.flags = 1; // датчик активен
             eeprom_update_block (&buffer, &ee_arr[dev_num], sizeof(buffer)); // записываем в епром описание текущего 1W устройства.
             dev_num ++; //инкременируем номер устройства - это будет следующее
 
@@ -489,7 +538,6 @@ void search_ID(void)
         lcd_com(0x01); // очистка дисплея
         _delay_us(1500);// время выполнения очистки не менее 1.5ms
         lcd_com(0x80);
-        //send_string_to_LCD ((uint8_t *)strcpy_P(buffer, (PGM_P) present_n)); // Выводим "Подкл.дат."
         send_string_to_LCD (present_n); // Выводим "Подкл.дат."
         lcd_dat(n +'0');// выводим количество найденых датчиков (значение переменной n из цикла поиска)
         _delay_ms(3000);
@@ -498,15 +546,18 @@ void search_ID(void)
     //Датчики найдены, адреса записаны, необходимо проверить правильность переданной информации
     i = 0;//обнулим, начнем проверрку с 0-х индексов
     j = 0;
+    m = n; //начальное значение колич. датчиков для счётчика прошедших проверку CRC
     while(i != n)//обрабатываем количество устройств(равно n из цикла поиска), начинаем с первого устройства
     {
-        eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer));// считываем описание усройства их епром
-        if (CRC_check (buffer.code, 0x07)) // передаём указатель на массив с ID, номер байта CRC8
+        eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer));// считываем описание усройства из епром
+        if (CRC_check (buffer.code, 0x07)) // передаём указатель на массив с ID, номер байта CRC8; если вернётся 1, CRC не ОК
         {
+            m--;
+            buffer.flags = 0x00; //сброс флага присутствия
             lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
             send_string_to_LCD (error);//выводим "ошибка иниц."
             lcd_dat (i +'0');
-            _delay_ms(1500);
+            _delay_ms(2000);
         }
         i++;
     }
@@ -515,7 +566,7 @@ void search_ID(void)
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
     send_string_to_LCD (init_n); //выводим "Иниц.дат."
-    lcd_dat(i+'0');//выводим кол-во устр-в, прошедших проверку CRC8
+    lcd_dat(m +'0');//выводим кол-во найденных устр-в, прошедших проверку CRC8
     _delay_ms(3000);
     lcd_com(0x01); // очистка дисплея
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
@@ -525,7 +576,85 @@ void search_ID(void)
     eeprom_update_byte ((uint8_t*)dev_qty, n);
 }
 
+/*// Функция выводит на LCD побитно байты 2, 3, 4 конф.регистра
+void Disp_pad (void)
+{
+	lcd_com(0x01); // очистка дисплея
+	_delay_us(1500);// время выполнения очистки не менее 1.5ms
+	uint8_t j;
+	uint8_t bit;
+	for (j=2; j<5; j++)
+	{
+		switch (j)
+		{
+			case 2 : lcd_com(0x80);
+			break;
+			case 3 : lcd_com(0xC0);
+			break;
+			case 4 : lcd_com(0x88);
+			break;
+		}
 
+		for (bit=0x80; bit !=0;)
+		{
+			if (scratchpad[j] & bit)
+				lcd_dat('1');
+			else
+				lcd_dat('0');
+			bit = bit >> 1;
+		}
+	}
+}	*/
+// функция чтения блокнота датчика
+uint8_t scratchpad_rd (void)
+{
+    uint8_t j = 0;// счетчик байт блокнота
+    uint8_t p;  //счётчик 72 битов для цикла считывания  блокнота
+    uint8_t bit = 0x01;// начальная позиция бита для формирования байта блокнота
+    uint8_t bit_reg; // сюда вносим ресультат чтения очередного бита
+    //uint8_t data_byte; // переменная для временного хранения одного байта ID-кода
+
+    for (j = 0; j < 9; j++) //обнулим массив
+    {
+        scratchpad[j] = 0x00;
+    }
+    j = 0;//обнуляем счетчик
+    init_device(); // выдаём импульс сброса и проверяем ответ датчиков
+    send_command(0x55);//команда соответствия
+    // передаём код устройства к которому обращаемся
+    for (j = 0; j < 8 ; j++)
+    {
+        //data_byte = buffer.code[j];
+        //send_command (data_byte); //передаем побайтово код устройства
+        send_command (buffer.code[j]);
+    }
+    j = 0;//обнуляем счетчик
+    send_command(0xBE); // читаем блокнот
+    for (p = 1; p <= 72; p++) // пока не будут прочитаны все 72 бита
+    {
+        bit_reg = read_data(); //читаем бит
+        if (bit_reg)
+            scratchpad[j] |= bit; //записываем бит =1
+        else
+            scratchpad[j] &= ~bit; // записываем бит = 0
+        bit <<= 1;//сдвигаем влево
+        if (!bit) //сдвиг проходит все 8 бит и значение равно 0
+        {
+            j++;
+            _delay_ms(100);
+            bit = 0x01;
+        }
+    }//выходит из цикла после обработки 72-х битов
+    init_device();
+    //Disp_pad ();
+    //_delay_ms(2000);
+    if (scratchpad[4] == 0xFF) // датчик не ответил, все биты конф.байта == 1
+        return 1;
+    else if (CRC_check(scratchpad, 0x08))//если CRC не OK
+        return 2;
+    else
+        return 0;
+}
 //начало основой программы
 int main(void)
 {
@@ -533,6 +662,8 @@ int main(void)
     unsigned char temp_int; //целая часть температура
     unsigned char temp_float; // дробная часть температуры
     unsigned int temp; // временная переменная для перевода из дополнительного кода в прямой при "-" температуре
+    unsigned int n = 0;
+    uint8_t srch_done = 0; // признак проведённой первичной дешифрации
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
     // LCD_COM_PORT = 0x00; // ставим 0 в RS и EN, раскомментировать если цеплять на разные порты
@@ -543,9 +674,63 @@ int main(void)
 
     DDR_SRC_PORT &= ~_BV(SRC_PIN_NUM);//ставим 0 - пин кнопки активирован на вход
     SRC_PORT |= _BV(SRC_PIN_NUM);//ставим 1 - внутр. подтяжка к +
-    if (!(SRC_PIN & src_msk)) //если на пине 0, кнопка нажата
+    if (!(SRC_PIN & src_msk)) //если на пине 0, т.е кнопка нажата, делаем полный поиск устройств на шине и перезапись найденного в епром
     {
         search_ID();
+        srch_done = 1;
+    }
+    if (!srch_done) // если дешифрация не выполнялась, переходим к опросу ранее записанных и далее к измерениям
+    {
+        n = eeprom_read_byte((uint8_t*)dev_qty); //считываем из епром число записанных в епром усройств
+        if (!n) // если n==0, поиск не производился, в епром пусто или мусор
+        {
+            lcd_com(0x01); // очистка дисплея
+            _delay_us(1500);// время выполнения очистки не менее 1.5ms
+            send_string_to_LCD (init_srch);// выводим "Выполните поиск"
+            abort ();
+        }
+
+        lcd_com(0x01); // очистка дисплея
+        _delay_us(1500);// время выполнения очистки не менее 1.5ms
+        lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+        send_string_to_LCD (ow_check);// сообщение "опрос линии"
+
+        for (uint8_t i = 0; i< n; i++) //начинаем перекличку с первого датчика (от 0)
+        {
+            eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства из епром
+            uint8_t pad_res = scratchpad_rd(); // результат чтения блокнота
+            if (!pad_res)
+            {
+                buffer.flags = 0x01;// подъём флага присутствия
+            }
+            else if (pad_res == 1)//если датчик просто не ответил, конф.байт будет == FF
+            {
+                buffer.flags = 0x00; //сброс флага присутствия
+                lcd_com(0x01); // очистка дисплея
+                _delay_us(1500);// время выполнения очистки не менее 1.5ms
+                lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+                send_string_to_LCD (no_answer_n);
+                lcd_dat(i +'0'); //выводим № не ответившего датчика
+                _delay_ms(2000);
+                lcd_com(0x01); // очистка дисплея
+                _delay_us(1500);// время выполнения очистки не менее 1.5ms
+            }
+            else if (pad_res == 2) //читаем блокнот i-го датч., если CRC не ОК, выводим сообщение об ошибке
+            {
+                buffer.flags = 0x00; //сброс флага присутствия
+                lcd_com(0x01); // очистка дисплея
+                _delay_us(1500);// время выполнения очистки не менее 1.5ms
+                lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
+                send_string_to_LCD (scratch_err);
+                lcd_dat(i +'0');
+                _delay_ms(2000);
+                lcd_com(0x01); // очистка дисплея
+                _delay_us(1500);// время выполнения очистки не менее 1.5ms
+            }
+            eeprom_update_block (&buffer, &ee_arr[i], sizeof(buffer)); // возвращаем в епром описание текущего 1W устройства с обновлённым байтом флагов.
+        }
+        lcd_com(0x01); // очистка дисплея
+        _delay_us(1500);// время выполнения очистки не менее 1.5ms
     }
 
     while(1)
@@ -553,21 +738,20 @@ int main(void)
         unsigned char j = 0;// переменные счетчики
         unsigned char i = 0;
         unsigned char n = 0;
-        //n = eeprom_read_byte(&dev_qty);
+
         n = eeprom_read_byte((uint8_t*)dev_qty);
-
-
         for (i = 0; i< n; i++) //начинаем с первого датчика (от 0)
         {
-            eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства их епром
+            eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства из епром
             init_device();//импульс сброса и присутствие
             send_command(0x55);//команда соответствия
             // после передадим код устройства к которому обращаемся
             for (j = 0; j < 8 ; j++)
             {
-                unsigned char data_byte; // переменная для передачи кода
-                data_byte = buffer.code[j];
-                send_command (data_byte); //передаем побайтово код устройства
+                //unsigned char data_byte; // переменная для передачи кода
+                //data_byte = buffer.code[j];
+                //send_command (data_byte); //передаем побайтово код устройства
+                send_command (buffer.code[j]);
             }
 
             send_command (0x44);//команда преобразования
@@ -576,9 +760,10 @@ int main(void)
             send_command(0x55);//команда соответствия
             for (j = 0; j < 8 ; j++)   // опять передаем адресс устройства, к которому будем обращаться
             {
-                unsigned char data_byte; // переменная для передачи кода
-                data_byte = buffer.code[j];
-                send_command (data_byte); //передаем побайтово код устройства
+                //unsigned char data_byte; // переменная для передачи кода
+                //data_byte = buffer.code[j];
+                //send_command (data_byte); //передаем побайтово код устройства
+                send_command (buffer.code[j]);
             }
             send_command (0xBE);//команда чтение памяти
             for (j = 0; j < 2; j++) //считываем первые два байта температуры
@@ -617,7 +802,7 @@ int main(void)
                 ((((temp_float + temp_int)<<1) + (temp_float + temp_int)<<3)) - умножаем на 10 сдвигами
             */
 
-            Disp_prep ((uint16_t)((temp_float*0.0625 + temp_int)*10), i, n); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ. строки дисп.
+            Disp_prep ((uint16_t)((temp_float*0.0625 + temp_int)*10), i, n); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ.№ строки диспл., кол-во строк
             if ((i & 0x01)||(i == (n-1))) //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя;
                 //если строка нижняя - ставим задержку перед сменой экрана.
                 //Если строка верхняя, но устройство последнее - тоже задержка
@@ -629,3 +814,8 @@ int main(void)
         }
     }	// закрывающая скобка бесконечного цикла
 }      // закрывающая скобка основной программы
+
+//сделать:
+// перевести temp_sign из глобальных в main
+//активировать проверку n<50 в дешифрации
+// упростить передачу кода в линию, возможно вывести в функцию
