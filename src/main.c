@@ -2,34 +2,36 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <stdlib.h> // для abort()
-// #include <avr/pgmspace.h> раскомментировать, если хранить строки и массив во флэш
+#include <avr/pgmspace.h> //раскомментировать, если хранить строки и массив во флэш
 // #include <math.h> раскомментировать, если нужна ф-я modf в ф-ии преобразования ЧПТ в цифры для передачи в ЖКИ
 
 #define RS PORTD3 //  Номер вывода порта, по которому передаётся команда RS в ЖКИ
 #define EN PORTD2 //  Номер вывода порта, по которому передаётся команда EN в ЖКИ
-#define LCD_COM_PORT PORTD // Порт для посыла команд в ЖКИ (сейчас порт команд и данных один, но могут быть разные!!!)
-//#define LCD_COM_PORT_DDR DDRD // Регистр направления данных порта, куда подцеплены линии команд ЖКИ, (см.выше). Раскомм., если команды и данные с разных портов.
-#define LCD_DAT_PORT PORTD // Порт отправки данных (и команд в случае одного порта на всё)в ЖКИ.
+#define LCD_COM_PORT PORTD // Порт для посыла команд в ЖКИ (команды и данные - могут быть не на одном порту!!!)
+//#define LCD_COM_PORT_DDR DDRD // Регистр направления данных в порту, куда подцеплены линии команд ЖКИ, см.выше
+#define LCD_DAT_PORT PORTD // Порт отправки данных (и команд в данном случае)в ЖКИ
 #define LCD_DAT_PORT_DDR DDRD // Регистр направления данных порта, куда подцеплен ЖКИ линиями данных (и команд в данном случае)
 /* бит-маски выделения ниблов и отправки их в порт LCD_DAT_PORT составляются соответственно номеров выводов, к которым
 подключен ЖКИ. в данном случае используются выводы 4-7 порта. */
 #define DDR_OW_PORT DDRB // Регистр направления данных порта, к одному из выводов которого подключена линия 1-Wire
 #define OW_PORT PORTB // Порт, к одному из выводов которого подключена линия 1-Wire
-#define OW_PIN PINB // Регистр приёма ответа линии 1-Wire, к одному из выводов которого она подключена
+#define OW_PIN PINB // Регистр приёма ответа линии 1-Wire, к одному из выводов которого подключена эта линия
 #define OW_PIN_NUM 0 // Номер PIN, к которому подключена линия 1-Wire, для макроса _BV()
 #define bit_msk 0x01 // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
 #define D 2 //максимальное количество датчиков, которое может быть подключено.
 
-const unsigned char tempC[] = "Темп-ра ";
-const unsigned char absence[] = "Нет датчиков";
-const unsigned char error[] = "ошибка иниц.";
-const unsigned char present_n[] = "Подкл.дат. ";
-const unsigned char init_n[] = "Иниц.дат. ";
-const unsigned char no_answer[] = "Нет ответа датч. ";
+const unsigned char tempC[] PROGMEM = "Темп-ра ";
+const unsigned char absence[] PROGMEM = "Нет датчиков";
+const unsigned char error[] PROGMEM = "ошибка иниц.";
+const unsigned char present_n[] PROGMEM = "Подкл.дат. ";
+const unsigned char init_n[] PROGMEM = "Иниц.дат. ";
+const unsigned char no_answer[] PROGMEM = "Нет ответа датч. ";
+//char buffer [20];
 unsigned char temp_sign; // признак знака температуры для ф-ции вывода на ЖКИ
 
+
 //Таблица перекодировки в русские символы.
-static const unsigned char convert_HD44780[64] =
+static const unsigned char convert_HD44780[64]PROGMEM =
         {
                 0x41,0xA0,0x42,0xA1,0xE0,0x45,0xA3,0xA4,
                 0xA5,0xA6,0x4B,0xA7,0x4D,0x48,0x4F,0xA8,
@@ -46,7 +48,7 @@ static uint8_t lcd_rus(uint8_t c)
     if  (c > 191)
     {
         c -= 192;
-        c = convert_HD44780[c];
+        c = pgm_read_byte (&(convert_HD44780[c]));
     }
     return c;
 }
@@ -88,9 +90,10 @@ void lcd_dat(unsigned char p)
 // функция вывода строки на ЖКИ
 void send_string_to_LCD (const unsigned char *s)
 {
-    while(*s)
+    while(pgm_read_byte (s))
     {
-        lcd_dat(lcd_rus (*s++));
+        lcd_dat(lcd_rus(pgm_read_byte(s++)));
+        _delay_ms (1);
     }
 }
 
@@ -156,6 +159,30 @@ unsigned char init_device(void)
     sei();// разрешаем прерывания
     return OK_Flag;
 }
+// функция отправки 1 в линию
+void send_1 (void)
+{
+    cli(); //Запретим общие прерывания
+    OW_PORT &= ~_BV(OW_PIN_NUM);//в порту ставим 0
+    DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
+    _delay_us(6);//задержка 15 мкс
+    //«отпускает»
+    DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
+    _delay_us(64);//задержка 45 мкс ,берем чуть больше
+    sei();// разрешаем прерывания
+}
+// функция отправки 0 в линию
+void send_0(void)
+{
+    cli(); //Запретим общие прерывания
+    OW_PORT &= ~_BV(OW_PIN_NUM);//в порту ставим 0
+    DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
+    _delay_us(60);//задержка 120 мкс
+    //«отпускает»
+    DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
+    _delay_us(10);//задержка 1 мкс ,перед записью следующего бита
+    sei();// разрешаем прерывания
+}
 
 //Функция выдачи команд на датчики
 void send_command (unsigned char command)
@@ -165,26 +192,12 @@ void send_command (unsigned char command)
     {
         if (command & 0x01) // если позиция бита 1, то передаем 1
         {
-            cli(); //Запретим общие прерывания
-            OW_PORT &= ~_BV(OW_PIN_NUM);//в порту ставим 0
-            DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
-            _delay_us(6);//задержка 15 мкс
-            //«отпускает»
-            DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
-            _delay_us(64);//задержка 45 мкс ,берем чуть больше
-            sei();// разрешаем прерывания
+            send_1 ();
         }
         else //передаем 0
         {
 
-            cli(); //Запретим общие прерывания
-            OW_PORT &= ~_BV(OW_PIN_NUM);//в порту ставим 0
-            DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
-            _delay_us(60);//задержка 120 мкс
-            //«отпускает»
-            DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
-            _delay_us(10);//задержка 1 мкс ,перед записью следующего бита
-            sei();// разрешаем прерывания
+            send_0 ();
         }
         command >>= 1;//сдвигаем вправо для обработки следующего бита
     }
@@ -301,25 +314,11 @@ int main(void)
                 // Далее запишем соответствующий бит, который при следующем исчеслении включит соответствующие устройства
                 if(data[i][j] & bit)
                 {
-                    cli(); //Запретим общие прерывания
-                    OW_PORT &= ~_BV(OW_PIN_NUM);// ставим в порту 0
-                    DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
-                    _delay_us(6);//задержка 5 мкс
-                    //«отпускает»
-                    DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
-                    _delay_us(64);//задержка 55 мкс ,берем чуть больше
-                    sei();// разрешаем прерывания
+                    send_1 ();
                 }
                 else //передаем 0
                 {
-                    cli(); //Запретим общие прерывания
-                    OW_PORT &= ~_BV(OW_PIN_NUM);//ставим в порту 0
-                    DDR_OW_PORT |= _BV(OW_PIN_NUM);//1 - порт на выход
-                    _delay_us(60);//задержка 60 мкс
-                    //«отпускает»
-                    DDR_OW_PORT &= ~_BV(OW_PIN_NUM);//0 - порт на вход
-                    _delay_us(10);//задержка 2 мкс ,перед записью следующего бита
-                    sei();// разрешаем прерывания
+                    send_0 ();
                 }
 
                 p++;//увеличиваем на 1
@@ -348,6 +347,7 @@ int main(void)
         lcd_com(0x01); // очистка дисплея
         _delay_us(1500);// время выполнения очистки не менее 1.5ms
         lcd_com(0x80);
+        //send_string_to_LCD ((uint8_t *)strcpy_P(buffer, (PGM_P) present_n)); // Выводим "Подкл.дат."
         send_string_to_LCD (present_n); // Выводим "Подкл.дат."
         lcd_dat(n +'0');// выводим количество найденых датчиков (значение переменной n из цикла поиска)
         _delay_ms(4000);
