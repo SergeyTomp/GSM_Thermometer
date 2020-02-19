@@ -22,7 +22,7 @@
 #define OW_PORT PORTB // Порт, к одному из выводов которого подключена линия 1-Wire
 #define OW_PIN PINB // Регистр приёма ответа линии 1-Wire, к одному из выводов которого подключена эта линия
 #define OW_PIN_NUM 0 // Номер PIN, к которому подключена линия 1-Wire, для макроса _BV()
-#define bit_msk 0x01 // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
+#define bit_msk (1<<OW_PIN_NUM) // Битовая маска для проверки сигнала от линии 1-Wire на соответствующем пине
 #define N_MAX 50 //максимальное количество устройств в епром
 
 //блок define для инициализации кнопки
@@ -30,10 +30,10 @@
 #define DDR_SRC_PORT DDRB // Регистр направления данных порта, к одному из выводов которого подключена кнопка нового поиска (здесь порт один с OW line)
 #define SRC_PIN PINB // Регистр приёма состояния кнопки
 #define SRC_PIN_NUM 1 // Номер PIN, к которому подключена кнопка, для макроса _BV()
-#define src_msk 0x02 // Битовая маска для проверки сигнала от кнопки на соответствующем пине
+#define src_msk (1<<SRC_PIN_NUM) // Битовая маска для проверки сигнала от кнопки на соответствующем пине
 
 //блок define для опроса кнопки
-#define CNT_QUICK 15 //количество сканирований на антидребезг, если больше - нажато точно
+#define CNT_QUICK 5 //количество сканирований на антидребезг, если больше - нажато точно
 #define CNT_SLOW 60 //количество сканирований на длинное нажатие
 #define QUICK 1 //длительность нажатия
 #define SLOW 2 //длительность нажати
@@ -45,10 +45,10 @@ unsigned char absence[] PROGMEM = "Нет датчиков"; //ошибка на этапе первой иници
 unsigned char no_answer[] PROGMEM = "Нет ответа датч."; //ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
 unsigned char present_n[] PROGMEM = "Подкл.дат. "; //количество датчиков, опознанных при первичной дешифрации адресов
 unsigned char dev_excess[] PROGMEM = "Много датчиков"; //ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
-unsigned char error[] PROGMEM = "Ошибка ID-CRC "; //ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
+unsigned char error[] PROGMEM = "Ошибка CRC-ID "; //ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
 unsigned char init_n[] PROGMEM = "Иниц.дат. "; //количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
 unsigned char init_srch[] PROGMEM = "Выполните поиск"; // ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
-unsigned char scratch_err[] PROGMEM = "Ош. блкн.CRC "; //ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
+unsigned char scratch_err[] PROGMEM = "Ош.CRC-блкн. "; //ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
 unsigned char no_answer_n[] PROGMEM = "Нет ответа "; //ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится № датчика
 unsigned char ow_check[] PROGMEM = "Опрос линии"; //сообщение в main при нормальном входе во время переклички
 unsigned char quick[] PROGMEM = "кратко"; // тестовое сообщение при кратком нажатии
@@ -65,6 +65,17 @@ unsigned char done[] PROGMEM = "Замена выполнена"; // сообщение в add_ID после в
 unsigned char no_new[] PROGMEM = "Новых устр-в нет"; // сообщение в add_ID если прошли весь цикл поиска ноовых ID
 
 // блок глобальных переменных и структур
+typedef struct //битовое поле для флагов
+{
+    uint8_t active : 1; // признак активности на линии
+    uint8_t lt_alarm : 1; // нижний порог температуры
+    uint8_t ht_alarm : 1; // верхний порог температуры
+    uint8_t line_alarm : 1; //признак пропадания в процессе измерений
+    uint8_t reserved_4 : 1;
+    uint8_t reserved_5 : 1;
+    uint8_t reserved_6 : 1;
+    uint8_t reserved_7 : 1;
+} bit_set;
 
 typedef struct //структура для параметров устройства
 {
@@ -72,7 +83,7 @@ typedef struct //структура для параметров устройства
     unsigned char code[8]; // код 1W устройства
     char tmax; // максимальная Т
     char tmin; // минимальная Т
-    char flags;// флаги состояния
+    bit_set flags;// флаги состояния
 } device; // структура для параметров 1W устройства
 
 device buffer; // переменная для обмена озу <-> епром
@@ -96,9 +107,9 @@ line line_dn; // нижняя строка кадра
 
 volatile uint16_t btn_cnt = 0; //счётчик считываний состояния кнопки
 volatile uint8_t btn_state = 0; //состояние кнопки - нажата/отпущена
-volatile uint8_t btn_time = 0; //время нажатия кнопки, действует только в обработчике прерывания на сканирование
+volatile uint8_t btn_time = 0; //время нажатия кнопки, действует только в обработчике прерывания на сканирование, но можно использовать снаружи для перехода по длинному жиму до отпускания
 volatile uint8_t press_time = 0; //это время нажатия кнопки отдаётся наружу
-volatile uint16_t int_cnt = 0; //счётчик переполнения таймера TIMER0, чтобы опрос кнопки на произвольной частоте
+volatile uint16_t int_cnt = 0; //счётчик переполнения таймера TIMER0, чтобы делать опрос кнопки на произвольной частоте
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -495,7 +506,7 @@ void search_ID(void)
         /* заполняем поля tmax, tmin и flags буфера значениями */
         buffer.tmax = 30;
         buffer.tmin = 6;
-        buffer.flags = 1; // датчик активен
+        buffer.flags.active = 1; // датчик активен
         cli();
         eeprom_update_block (&buffer, &ee_arr[n-1], sizeof(buffer)); // записываем в епром описание текущего 1W устройства.
         sei();
@@ -506,8 +517,12 @@ void search_ID(void)
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80);
     send_string_to_LCD (present_n); // Выводим "Подкл.дат."
-    lcd_dat(n +'0');// выводим количество найденых датчиков (значение переменной n из цикла поиска)
-    _delay_ms(3000);
+    if (n/10 > 0)
+    {
+        lcd_dat(n/10 + '0'); //десятки n
+    }
+    lcd_dat(n%10 + '0'); //единицы n
+    _delay_ms(2500);
 
     //Датчики найдены, адреса записаны, необходимо проверить правильность переданной информации
     i = 0;//обнулим, начнем проверку с 0-х индексов
@@ -519,10 +534,11 @@ void search_ID(void)
         if (CRC_check (buffer.code, 0x07)) // передаём указатель на массив с ID, номер байта CRC8; если вернётся 1, CRC не ОК
         {
             m--;
-            buffer.flags = 0x00; //сброс флага присутствия
+            buffer.flags.active = 0; //сброс флага присутствия
             lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
-            send_string_to_LCD (error);//выводим "ошибка иниц."
-            lcd_dat (i +'0');
+            send_string_to_LCD (error);//выводим "Ошибка CRC-ID"
+            lcd_com(0xC0);
+            send_arr_to_LCD (buffer.name);
             _delay_ms(2000);
         }
         i++;
@@ -532,8 +548,12 @@ void search_ID(void)
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
     send_string_to_LCD (init_n); //выводим "Иниц.дат."
-    lcd_dat(m +'0');//выводим кол-во найденных устр-в, прошедших проверку CRC8
-    _delay_ms(3000);
+    if (m/10 > 0)
+    {
+        lcd_dat(m/10 + '0'); //десятки m
+    }
+    lcd_dat(m%10 + '0'); //единицы m
+    _delay_ms(2500);
     lcd_com(0x01); // очистка дисплея
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     cli();
@@ -660,10 +680,10 @@ ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
     int_cnt++;
     if (int_cnt == 2) //при максимальном делителе таймера 1024 нужно доп.делитель на 2, чтобы иметь 30Гц
     {
-        cli();
+        //cli();
         BTN_SCAN ();
         int_cnt = 0;
-        sei();
+        //sei();
     }
 }
 
@@ -679,12 +699,12 @@ void add_ID(void)
     lcd_com(0x01); // очистка дисплея
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80);
-    send_string_to_LCD (tuning);//выводим "Настройка"
+    send_string_to_LCD (tuning);//выводим "Замена/добавл-е"
     _delay_ms(1500);
-    press_time = 0;
     //while (!press_time) {;} //ждём отпускания кнопки
-    //press_time = 0; //обнуляем, чтобы не отработало при следующем запросе здесь
     //в main сделать возможным переход сюда по длнному нажатию до отпускания кнопки
+    press_time = 0;
+
 
     for (j = 0; j < 8; j++)   {data[j] = 0x00;} //обнулим буфер-массив
     j = 0;//обнуляем счётчик буфер-массива
@@ -695,8 +715,11 @@ void add_ID(void)
     _delay_us(1500);// время выполнения очистки не менее 1.5ms
     lcd_com(0x80);
     send_string_to_LCD (total_qty); //выводим "Всего устройств"
-    lcd_com(0xC0);
-    lcd_dat(n/10 + '0'); //десятки n
+    lcd_com(0xC7);
+    if (n/10 > 0)
+    {
+        lcd_dat(n/10 + '0'); //десятки n
+    }
     lcd_dat(n%10 + '0'); //единицы n
     _delay_ms(1500);
 
@@ -705,7 +728,7 @@ void add_ID(void)
         for (i = 0; i < n; i++)
         {
             eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));//считываем флаг 1W устройства из епром
-            if (!buffer.flags) //если в епром есть неактивное, переходим к поиску
+            if (!buffer.flags.active) //если в епром есть неактивное, переходим к поиску
                 break;
             else if (i == (n - 1))// если неактивных нет и епром полная, выходим в main с сообщением
             {
@@ -758,7 +781,7 @@ void add_ID(void)
                 for (i = 0; i < n; i++)
                 {
                     eeprom_read_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags));//считываем флаг текущего 1W устройства из епром
-                    if (!buffer.flags)
+                    if (!buffer.flags.active) // ищем неактивное устройство
                     {
                         eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
                         lcd_com(0x80);
@@ -770,7 +793,7 @@ void add_ID(void)
                         {
                             // запись ID-кода 1-го 1W устройства в ID_string и копирование его в буфер-структуру
                             for (j=0; j < 8; j++)   {buffer.code[j] = data[j];}
-                            buffer.flags = 1; // датчик активен
+                            buffer.flags.active = 1; // датчик активен
                             cli();
                             eeprom_update_block (&buffer.code, &ee_arr[i].code, sizeof(buffer.code)); // записываем в епром ID-код нового 1W устройства.
                             eeprom_update_block (&buffer.flags, &ee_arr[i].flags, sizeof(buffer.flags)); //записываем в епром флаг нового 1W устройства.
@@ -813,7 +836,7 @@ void add_ID(void)
 
                     buffer.tmax = 30;
                     buffer.tmin = 6;
-                    buffer.flags = 1; // датчик активен
+                    buffer.flags.active = 1; // датчик активен
                     cli();
                     eeprom_update_block (&buffer, &ee_arr[n], sizeof(buffer)); // записываем в конец списка в епром описание текущего 1W устройства.
                     sei();
@@ -912,28 +935,30 @@ int main(void)
             uint8_t pad_res = scratchpad_rd(); // результат чтения блокнота
             if (!pad_res)
             {
-                buffer.flags = 0x01;// подъём флага присутствия
+                buffer.flags.active = 1;// подъём флага присутствия
             }
             else if (pad_res == 1)//если датчик просто не ответил, конф.байт будет == FF
             {
-                buffer.flags = 0x00; //сброс флага присутствия
+                buffer.flags.active = 0; //сброс флага присутствия
                 lcd_com(0x01); // очистка дисплея
                 _delay_us(1500);// время выполнения очистки не менее 1.5ms
                 lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
-                send_string_to_LCD (no_answer_n);
-                lcd_dat(i +'0'); //выводим № не ответившего датчика
+                send_string_to_LCD (no_answer_n); // выводим "Нет ответа "
+                lcd_com(0xC0);
+                send_arr_to_LCD (buffer.name);
                 _delay_ms(2000);
                 lcd_com(0x01); // очистка дисплея
                 _delay_us(1500);// время выполнения очистки не менее 1.5ms
             }
             else if (pad_res == 2) //читаем блокнот i-го датч., если CRC не ОК, выводим сообщение об ошибке
             {
-                buffer.flags = 0x00; //сброс флага присутствия
+                buffer.flags.active = 0; //сброс флага присутствия
                 lcd_com(0x01); // очистка дисплея
                 _delay_us(1500);// время выполнения очистки не менее 1.5ms
                 lcd_com(0x80); // выводим строку в 1-ю верхнюю левую позицию 1 строки экрана
-                send_string_to_LCD (scratch_err);
-                lcd_dat(i +'0');
+                send_string_to_LCD (scratch_err); // выводим "Ош.CRC-блкн. "
+                lcd_com(0xC0);
+                send_arr_to_LCD (buffer.name);
                 _delay_ms(2000);
                 lcd_com(0x01); // очистка дисплея
                 _delay_us(1500);// время выполнения очистки не менее 1.5ms
@@ -970,7 +995,7 @@ int main(void)
                     break;
             }
             eeprom_read_block (&buffer, &ee_arr[i], sizeof(buffer)); // считываем описание усройства из епром
-            if (buffer.flags)//если флаг присутствия поднят, запрашиваем температуру
+            if (buffer.flags.active)//если флаг присутствия поднят, запрашиваем температуру
             {
                 init_device();//импульс сброса и присутствие
                 send_command(0x55);//команда соответствия
