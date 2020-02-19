@@ -725,7 +725,7 @@ void BTN_SCAN(void)
     }
 }
 
-void add_ID(void) // режим удаления/добавления/вставки устройств
+void add_ID(void) // меню корректировки - удаление/добавление/замена(вставка) устройств
 {
     unsigned char i, j = 0;// переменные счетчики
     unsigned char n = 0;  //количество датчиков, записанных в епром
@@ -1042,7 +1042,7 @@ int main(void)
     uint8_t n = 0; // для количества записанных в епром устройств
     uint8_t srch_done = 0; // признак проведённой первичной дешифрации
     uint8_t digits[N_DIGS]; //массив для передачи в utoa_fast_div для заполнения его кодами символов цифр температуры
-    uint8_t tmp[7]; //массив для выгрузки из кольцевого буфера
+    uint8_t tmp[20]; //массив для выгрузки из кольцевого буфера
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); //линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
     // LCD_COM_PORT = 0x00; // ставим 0 в RS и EN, раскомментировать если DAT и COM цеплять на разные порты
@@ -1265,10 +1265,22 @@ int main(void)
                         lcd_clr(); // очистка дисплея
                         uint16_t num = IndexNumber(); //сколько байт в кольцевом буфере
                         Ring_to_Str(tmp,num); //выгружаем из кольца в tmp
-                        //lcd_clr(); // очистка дисплея
                         for(uint8_t j=0; j < (num-1); j++)
                         {lcd_dat_XY(tmp[j], j, 0);}
-                        _delay_ms(1000);
+                        _delay_ms(2000);
+                        if ((tmp[0]='R')&&(tmp[1]='E')&&(tmp[2]='N')&&(tmp[3]=' '))
+                        {
+                            for (i = 0; i < n; i++)
+                            {
+                                eeprom_read_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name));
+                                if (!strncmp((void*)buffer.name, (void*)&tmp[4], sizeof(buffer.name)-1))
+                                {
+                                    location = &tmp[12];
+                                    strncpy((void*)buffer.name, (void*)location, sizeof (buffer.name)-1); // записываем ASCII код имени в поле name буфера
+                                    eeprom_update_block (&buffer.name, &ee_arr[i].name, sizeof(buffer.name)-1);
+                                }
+                            }
+                        }
                     }
                 }
             }	// закрывающая скобка задержки для индикации
