@@ -1,12 +1,13 @@
 #include <avr/io.h>
-#include <util/delay.h>
-#include <avr/interrupt.h>
+#include <util/delay.h>		// задержки
+#include <avr/interrupt.h>	// прерывания
 #include <stdlib.h>
-#include <avr/pgmspace.h>
-#include <avr/eeprom.h>
-#include <string.h>
-// #include <math.h> раскомментировать, если нужна ф-я modf в ф-ии преобразования ЧПТ в цифры для передачи в ЖКИ
+#include <avr/pgmspace.h>	// строки во флэш
+#include <avr/eeprom.h>		// работа с епром
+#include <string.h>			// функции работы со строками
+#include <ctype.h>			// для isdigit()
 
+//#define DEBUG
 //блок define для LCD
 #define RS PORTD3						// Номер вывода порта, по которому передаётся команда RS в ЖКИ
 #define EN PORTD2						// Номер вывода порта, по которому передаётся команда EN в ЖКИ
@@ -47,50 +48,106 @@
 #define PRESSED 1						// состояние кнопки - нажата
 
 // блок define для светодиода индикации gsm уровня
-#define LED_PORT PORTB					// Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
-#define DDR_LED_PORT DDRB				// Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
-#define LED_PIN_NUM 5					// Номер PIN, к которому подключен светодиод, для макроса _BV()
+#define LED_PORT		PORTB	// Порт, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define DDR_LED_PORT	DDRB	// Регистр направления данных порта, к одному из выводов которого подключен светодиод (здесь порт один с OW line)
+#define LED_PIN_NUM		5		// Номер PIN, к которому подключен светодиод, для макроса _BV()
+#define GSM_LVL_TIME	3600	// интервал запроса уровня сигнала 60c
+
+//блок define для USART-GSM
+#define MYUBRR			103					// скорость usart 9600
+#define RX_RING_SIZE	128					// размер буфера берём 128, ответ модема с текстом вх.смс больше 64 байт, а нужно обеспечить размер равный степени 2
+#define RX_IND_MSK		(RX_RING_SIZE - 1)	// маска индексов кольцевого буфера приёмника для обнуления индекса при переходе  RX_Index через 0
+#define TX_RING_SIZE	32					// размер буфера берём 32, максимальная длина посылки в модем 25 байт, но нужно обеспечить размер равный степени 2
+#define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
+
+//блок define для работы с модемом
+#define SMS_SIZE			25					// ограничение длины исходящих смс
+#define QUEUE_SIZE			16					// размер кольца очереди обработчиков
+#define INC_TASK_SIZE		8 					// размер кольца задач на чтение смс
+#define OUT_TASK_SIZE		4					// размер кольца задач на отправку смс
+#define CMD_TASK_SIZE		4					// размер кольца задач на отправку команд
+#define QUEUE_IND_MSK		(QUEUE_SIZE - 1)	// маска кольца очереди обработчиков
+#define INC_TASK_IND_MSK	(INC_TASK_SIZE - 1)	// маска кольца задач на чтение смс
+#define OUT_TASK_IND_MSK	(OUT_TASK_SIZE - 1)	// маска кольца задач на отправку смс
+#define CMD_TASK_IND_MSK	(CMD_TASK_SIZE - 1)	// маска кольца задач на отправку команд
+#define PWR_UP_ANS_TIMER	900					// таймер получения ответа модема при включении
+#define PAUSE_CNT_MAX		60					// максимальная пауза после приёма очередного байта по RX перед XOFF (PAUSE_CNT_MAX/60)c
+#define MSG_SIZE			(RX_RING_SIZE + 1)	// размер массива для выгрузки из кольца приёмника; +1б к Rx-кольцу т.к. в конце всегда нужен 0 даже при выгрузке 128б
+#define TODO_MAX			20					// размер массива для текста команды контроллеру
+#define RST_PORT			PORTB				// Порт, к одному из выводов которого подключен вывод сброса модема(здесь порт один с OW line)
+#define DDR_RST_PORT		DDRB				// Регистр направления данных порта, к одному из выводов которого подключен вывод сброса модема(здесь порт один с OW line)
+#define RST_PIN_NUM			2 					// Номер вывода, к которому подключен вывод сброса модема, для макроса _BV()
 
 // блок текстовых сообщений во флэш
-unsigned char absence[] PROGMEM = "Нет датчиков";				// ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
-unsigned char no_answer[] PROGMEM = "Нет ответа датч.";			// ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
-unsigned char present_n[] PROGMEM = "Найдено датч. ";			// количество устройств, опознанных при первичной дешифрации адресов
-unsigned char dev_excess[] PROGMEM = "Много датчиков";			// ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
-unsigned char error[] PROGMEM = "Ошибка CRC-ID ";				// ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
-unsigned char init_n[] PROGMEM = "Исправн.датч. ";				// количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
-unsigned char init_srch[] PROGMEM = "Выполнить поиск?";			// ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
-unsigned char scratch_err[] PROGMEM = "Ош.CRC-блкн. ";			// ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
-unsigned char no_answer_n[] PROGMEM = "Нет ответа ";			// ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится имя датчика
-unsigned char ow_check[] PROGMEM = "Опрос линии";				// сообщение в main при нормальном входе во время переклички
-unsigned char correction[] PROGMEM = "Корректировка";			// сообщение в add_ID при входе
-unsigned char subst_add[] PROGMEM = "Замена/добавл-е";			// сообщение в add_ID при входе в блок замены/удаления
-unsigned char total_qty[] PROGMEM = "Всего устройств";			// сообщение в add_ID перед началом поиска
-unsigned char plug_in[] PROGMEM = "Подключите устр.";			// сообщение в add_ID перед началом поиска
-unsigned char press_btn[] PROGMEM = "и нажмите кнопку";			// сообщение в add_ID перед началом поиска
-unsigned char mem_full[]PROGMEM = "Память заполнена";			// сообщение в add_ID, если количество датчиков уже 50, а неактивных нет
-unsigned char new_dev_fnd[] PROGMEM = "Найдено новое";			// верхняя строка сообщения в add_ID, если найдено новое
-unsigned char nev_dev_add[] PROGMEM = "Добавлено новое";		// верхняя строка сообщения в add_ID в конце блока добавления
-unsigned char element[] PROGMEM = "устройство";					// нижняя строка сообщения в add_ID, если найдено или добавлено новое
-unsigned char substitute[] PROGMEM = "Заменить?";				// сообщение в add_ID в блоке замены, если нашли неактивное устр-во, выводится имя датчика
-unsigned char add_to_end[] PROGMEM = "Добавить?";				// сообщение в add_ID в начале блока добавления
-unsigned char done[] PROGMEM = "Замена выполнена";				// сообщение в add_ID после вставки взамен неактивного
-unsigned char no_new[] PROGMEM = "Новых устр-в нет";			// сообщение в add_ID если прошли весь цикл поиска ноовых ID
-unsigned char delete[] PROGMEM = "Удалить?";					// сообщение - первый пункт меню Корректировка
-unsigned char del_done[] PROGMEM = "Удалено";					// сообщение по факту удаления устройства
-unsigned char t_error[] PROGMEM = "Неверная темп-ра";			// сообщение при попытке записать некорректную температуру в датчик
-unsigned char com_error[] PROGMEM = "Неверная команда";			// сообщение при ошибке в тексте команды
-unsigned char name_error_ren[] PROGMEM = "Неверное имя REN";	// сообщение при ошибкочном имени в тексте команды
-unsigned char name_error_al[] PROGMEM = "Неверное имя AL";		// сообщение при ошибкочном имени в тексте команды
-unsigned char name_error_sms[] PROGMEM = "Неверное имя SMS";	// сообщение при ошибкочном имени в тексте команды
-unsigned char t_min[] PROGMEM = "Tmin";							// часть строки при подтверждении изменения минимального порогоа температуры
-unsigned char t_max[] PROGMEM = "Tmax";							// часть строки при подтверждении изменения максимального порога температуры
-unsigned char t_low[] PROGMEM = "T<";							// часть строки при сообщениии о снижении температуры ниже минимального порога
-unsigned char t_high[] PROGMEM = "T>";							// часть строки при сообщениии о повышении температуры выше максимального порога
-unsigned char sms_send []PROGMEM = "SMS";						// часть строки при подтверждении включения sms о выходе температуры за пределы
-unsigned char on []PROGMEM = "ВКЛ.";
-unsigned char off []PROGMEM = "ОТК.";
-unsigned char blank []PROGMEM = " ";
-unsigned char crash []PROGMEM = "АВАРИЯ!";
+unsigned char absence[] 		PROGMEM = "Нет датчиков";		// ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
+unsigned char no_answer[] 		PROGMEM = "Нет ответа датч.";	// ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
+unsigned char present_n[] 		PROGMEM = "Найдено датч. ";		// количество устройств, опознанных при первичной дешифрации адресов
+unsigned char dev_excess[] 		PROGMEM = "Много датчиков";		// ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
+unsigned char error[] 			PROGMEM = "Ошибка CRC-ID ";		// ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
+unsigned char init_n[]			PROGMEM = "Исправн.датч. ";		// количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
+unsigned char init_srch[] 		PROGMEM = "Выполнить поиск?";	// ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
+unsigned char scratch_err[] 	PROGMEM = "Ош.CRC-блкн. ";		// ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
+unsigned char no_answer_n[] 	PROGMEM = "Нет ответа ";		// ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится имя датчика
+unsigned char ow_check[] 		PROGMEM = "Опрос линии";		// сообщение в main при нормальном входе во время переклички
+unsigned char correction[] 		PROGMEM = "Корректировка";		// сообщение в add_ID при входе
+unsigned char subst_add[] 		PROGMEM = "Замена/добавл-е";	// сообщение в add_ID при входе в блок замены/удаления
+unsigned char total_qty[] 		PROGMEM = "Всего устройств";	// сообщение в add_ID перед началом поиска
+unsigned char plug_in[] 		PROGMEM = "Подключите устр.";	// сообщение в add_ID перед началом поиска
+unsigned char press_btn[] 		PROGMEM = "и нажмите кнопку";	// сообщение в add_ID перед началом поиска
+unsigned char mem_full[]		PROGMEM = "Память заполнена";	// сообщение в add_ID, если количество датчиков уже 50, а неактивных нет
+unsigned char new_dev_fnd[] 	PROGMEM = "Найдено новое";		// верхняя строка сообщения в add_ID, если найдено новое
+unsigned char nev_dev_add[] 	PROGMEM = "Добавлено новое";	// верхняя строка сообщения в add_ID в конце блока добавления
+unsigned char element[] 		PROGMEM = "устройство";			// нижняя строка сообщения в add_ID, если найдено или добавлено новое
+unsigned char substitute[] 		PROGMEM = "Заменить?";			// сообщение в add_ID в блоке замены, если нашли неактивное устр-во, выводится имя датчика
+unsigned char add_to_end[] 		PROGMEM = "Добавить?";			// сообщение в add_ID в начале блока добавления
+unsigned char done[] 			PROGMEM = "Замена выполнена";	// сообщение в add_ID после вставки взамен неактивного
+unsigned char no_new[] 			PROGMEM = "Новых устр-в нет";	// сообщение в add_ID если прошли весь цикл поиска ноовых ID
+unsigned char delete[] 			PROGMEM = "Удалить?";			// сообщение - первый пункт меню Корректировка
+unsigned char del_done[] 		PROGMEM = "Удалено";			// сообщение по факту удаления устройства
+unsigned char t_error[] 		PROGMEM = "Неверная темп-ра";	// сообщение при попытке записать некорректную температуру в датчик
+unsigned char com_error[] 		PROGMEM = "Неверная команда";	// сообщение при ошибке в тексте команды
+unsigned char frame_err[]		PROGMEM = "Ошибка приёма!"; 	// сообщение при ошибке приёма байта по Rx
+unsigned char name_error_ren[] 	PROGMEM = "Неверное имя REN";	// сообщение при ошибкочном имени в тексте команды
+unsigned char name_error_al[] 	PROGMEM = "Неверное имя AL";	// сообщение при ошибкочном имени в тексте команды
+unsigned char name_error_sms[] 	PROGMEM = "Неверное имя SMS";	// сообщение при ошибкочном имени в тексте команды
+unsigned char t_min[] 			PROGMEM = "Tmin";				// часть строки при подтверждении изменения минимального порогоа температуры
+unsigned char t_max[] 			PROGMEM = "Tmax";				// часть строки при подтверждении изменения максимального порога температуры
+unsigned char t_low[] 			PROGMEM = "T<";					// часть строки при сообщениии о снижении температуры ниже минимального порога
+unsigned char t_high[] 			PROGMEM = "T>";					// часть строки при сообщениии о повышении температуры выше максимального порога
+unsigned char sms_send []		PROGMEM = "SMS";				// часть строки при подтверждении включения sms о выходе температуры за пределы
+unsigned char on []				PROGMEM = "ВКЛ.";
+unsigned char off []			PROGMEM = "ОТК.";
+unsigned char blank []			PROGMEM = " ";
+unsigned char crash []			PROGMEM = "АВАРИЯ!";
+unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";
+unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";
+unsigned char quick[]			PROGMEM = "QUICK";
+unsigned char slow[]			PROGMEM = "SLOW";
+unsigned char sim900[]			PROGMEM = "SIM900 ";
+unsigned char not_rdy[]			PROGMEM = "не готов";
+unsigned char out_ring_ovf[]	PROGMEM = "Исх.буф.полный!";
+unsigned char inc_ring_ovf[]	PROGMEM = "Вх.буф.полный!";
+unsigned char cmd_ring_ovf[]	PROGMEM = "Ком.буф.полный!";
+unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";
+
+//блок текстовых строк во флэш для работы с модемом
+unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
+unsigned char AT_CMGD[]			PROGMEM = "AT+CMGD=";		// удалить смс ("=1,4" - удалить все)
+unsigned char AT_CMGS[]			PROGMEM = "AT+CMGS=\"";		// послать смс
+unsigned char ANS_ENT[]			PROGMEM = "\r\n> ";			// затем вводим текст
+unsigned char ANS_CMGS[]		PROGMEM = "\r\n+CMGS: ";	// смс отправлено
+unsigned char CTRL_Z[]			PROGMEM = {0x1A, 0};		// Ctrl-Z - символ завершения смс
+unsigned char AT_CMGR[]			PROGMEM = "AT+CMGR=";		// прочитать смс
+unsigned char ANS_CMGR[]		PROGMEM = "\r\n+CMGR: ";	// ответ
+unsigned char AT_BUSY[]			PROGMEM = "AT+GSMBUSY=1";	// запрет всех входящих звонок (1-запрещены, 0 - разрешены)
+unsigned char ANS_CMTI[]		PROGMEM = "\r\n+CMTI: ";	// входящее смс
+unsigned char AT_CSQ[]			PROGMEM = "AT+CSQ";			// запрос уровня сигнала
+unsigned char ANS_CSQ[]			PROGMEM = "\r\n+CSQ: ";		// ответ на запрос уровня сигнала
+unsigned char CRLF[]			PROGMEM = "\r\n";			// символы CRLF
+unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
+unsigned char PHONE[]			PROGMEM = "+79052135678";	// номер телефона, пока здесь
+unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
+unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
 
 // блок глобальных переменных и структур
 typedef struct //битовое поле для флагов
@@ -133,13 +190,13 @@ const uint16_t dev_last_n = (EEP_MEM - 2);									// константа, содержащая знач
 const uint8_t n_max = (uint8_t)((EEP_MEM - 2) / sizeof(device));			// максимально допустимое количество усройств в епром
 uint8_t scratchpad [9];														// массив байтов, прочитанных из блокнота DS18B20
 
-
-
-volatile uint8_t flash_cnt;		// счётчик прерываний для индикации уровня gsm вспышками диода
-volatile uint8_t flash_num;		// число прошедших вспышек
-volatile uint8_t pause_num;		// число прошедших отрезков пауз между сериями вспышек
-const uint8_t gsm_lvl = 6;		// уровень gsm сигнала, пока const
-
+//блок переменных-счётчиков для индикации уровня gsm
+volatile uint8_t flash_cnt; 	// счётчик прерываний для индикации уровня gsm вспышками диода
+volatile uint8_t flash_num; 	// число прошедших вспышек
+volatile uint8_t pause_num; 	// число прошедших отрезков пауз между сериями вспышек
+volatile uint8_t gsm_lvl; 		// уровень gsm сигнала
+volatile uint16_t time_gsm; 	// счётчик для запросов уровня сигнала gsm-модуля
+volatile uint8_t gsm_lvl_req;	// флаг запроса уровня gsm сигнала
 
 typedef struct // структура для строки дисплея, из них строится кадр (экран)
 {
@@ -161,6 +218,76 @@ volatile uint8_t delay_cnt = IND_PAUSE;		// таймер задержки на индикацию после о
 volatile uint16_t wait_timer = WAIT_LIM + 1;// таймер ожидания действий пользователя остановлен, +1 чтобы при первом входе в меню не сработала проверка if(wait_timer==WAIT_LIM)
 //volatile uint16_t time_gsm = 0;			// счётчик для запросов gsm-модуля
 
+//блок переменных, структур и массивов для работы с модемом
+typedef struct	//структура трекинга работы обработчиков
+{
+    uint8_t flag_1 : 1;	// шаг 1
+    uint8_t flag_2 : 1;	// шаг 2
+    uint8_t flag_3 : 1;	// резерв
+    uint8_t flag_4 : 1;	// резерв
+    uint8_t flag_5 : 1;	// резерв
+    uint8_t flag_6 : 1;	// резерв
+    uint8_t flag_7 : 1;	// резерв
+    uint8_t flag_8 : 1;	// резерв
+}tracker;
+
+typedef struct 	//структура задачи приёма смс, 4 байта
+{
+    tracker step;						// Флаги процесса
+    uint8_t	sms_num[3];					// массив символов порядкового номера смс для чтения
+}inc_task;
+
+typedef struct //структура задачи отправки смс, 21 байт, снизить до 8 через передачу сюда № устройства, указателей (части строк смс) и массива символов (текущее значение параметра).
+{
+    tracker step;						// Флаги процесса
+    uint8_t sms_txt [SMS_SIZE]; 		// Массив для записи текста смс для отправки
+}out_task;
+
+typedef struct //структура задачи отправки команд в модем, 5 байт
+{
+    tracker step;						// Флаги процесса
+    uint8_t* cmd;						// указатель на AT-команду
+    uint8_t* par;						// указатель на параметр AT-команды
+}cmd_task;
+
+volatile unsigned char pause_cnt;		// счётчик паузы после приёма последнего байта в кольцо приёмника
+volatile unsigned char msg_upld; 		// флаг окончания новой посылки от модема и разрешения выгрузки в из кольца приемника в msg
+volatile unsigned char modem_rdy;		// флаг готовности модема
+unsigned char cmd_task_H, cmd_task_T, inc_task_H, inc_task_T, out_task_H, out_task_T, queue_H, queue_T = 0;//индексы очереди и списков
+volatile uint16_t ans_cnt;				// счётчик интервала на получение ответа OK от модема на команду
+uint16_t ans_lim;						// предел интервала на получение ответа модема на команду
+uint8_t handl_res;						// результат работы обработчика задачи
+uint8_t msg[MSG_SIZE]; 					// массив для выгрузки из кольцевого буфера     	#############
+uint8_t todo_txt [TODO_MAX];			// массив для выгрузки текста команды контроллеру	#############
+uint8_t mod_ans;						// парсер присваивает значение в зависимости от ответа модема на запросы ( "ОК", ">" и пр.)
+enum {OK = 1, INVITE};					// варианты значений для mod_ans, см.выше
+tracker RESET;							// создаём битовое поле для флагов инициализаци модема
+
+//	блок переменных и массивов для работы с USART
+/*	алгоритм работы колец Rx и Tx - сначала сдвигаем индекс, потом пишем/читаем
+	КОЛЬЦА ОЧЕРЕДИ ОБРАБОТЧИКОВ И СПИСКОВ ЗАДАЧ РАБОТАЮТ ПО-ДРУГОМУ!!! */
+volatile uint8_t RX_IndexIN;	// входящий индекс кольцевого буфера приёмника, здесь обязательно volatile, меняется только в прерывании
+uint8_t RX_IndexOUT;			// выходящий индекс кольцевого буфера приёмника
+uint8_t RX_ring[RX_RING_SIZE];	// массив для кольцевого буфера приёмника
+uint8_t TX_IndexIN;				// входящий индекс кольцевого буфера передатчика,
+volatile uint8_t TX_IndexOUT;	// выходящий индекс кольцевого буфера передатчика; здесь обязательно volatile, меняется только в прерывании
+uint8_t TX_ring[TX_RING_SIZE];	// массив для кольцевого буфера передатчика
+
+//блок функций и массивов для работы с очередями
+/*	алгоритм работы колец очереди и задач: сначала читаем/пишем, потом сдвигаем индекс
+	алгоритм отличается от алгоритма колец Rx и TX!!! */
+inc_task RD_SMS[INC_TASK_SIZE];				//кольцевой список задач чтения смс
+out_task WR_SMS[OUT_TASK_SIZE];				//кольцевой список задач отправки смс
+cmd_task WR_CMD[CMD_TASK_SIZE];				//кольцевой список задач отправки команд
+uint8_t (*HANDLERS[QUEUE_SIZE])(void);		//кольцевая очередь указателей на функции-обработчики заданий
+uint8_t read_sms (void);					//объявляем HANDLER чтения смс
+uint8_t send_sms (void);					//объявляем HANDLER отправки смс
+uint8_t parser(void);						//объявляем HANDLER разбора текста
+uint8_t send_cmd (void);					//объявляем HANDLER отправки команды в модем
+void inc_to_queue(uint8_t*);				//объявляем функцию постановки в очередь задачи чтения смс
+void out_to_queue(uint8_t*);				//объявляем функцию постановки в очередь задачи отправки смс
+void cmd_to_queue(uint8_t*, uint8_t*);		//объявляем функцию постановки в очередь задачи отправки команды в модем
+void to_do(void);							//объявляем функцию разбора и выполнения команд из текста смс
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -783,6 +910,626 @@ void BTN_SCAN(void)
     }
 }
 
+/*					#######################		начало блока функций работы с приёмником 		###########################*/
+
+// Функция очистки кольцевого буфера приёмника
+/*void Clear_RX_Ring(void)
+{
+	cli();
+	RX_IndexIN = 0;
+	RX_IndexOUT = 0;
+	sei();
+}*/
+
+// Функция возвращает количество непрочитанных байт в кольцевом буфере приёмника
+uint8_t RX_IndexNumber(void)
+{
+    return (RX_IndexIN - RX_IndexOUT) & RX_IND_MSK;
+}
+
+// Функция загрузки байта данных в кольцевой буфер приёмника
+uint8_t UDR_to_RX_Ring(char value)
+{
+    if (((RX_IndexIN + 1) & RX_IND_MSK) == RX_IndexOUT)
+        return 1; // Переполнение буфера, не пишем новые данные
+    else
+    {
+        RX_IndexIN++;
+        RX_IndexIN &= RX_IND_MSK;
+        RX_ring[RX_IndexIN] = value;
+        return 0;
+    }
+}
+
+// Функция выгрузки строки данных из кольцевого буфера в массив для разбора команд
+void RX_Ring_to_Str(uint8_t *str, uint8_t lenght)
+{
+    for(uint8_t i=0; i<lenght; i++)
+    {
+        RX_IndexOUT++;
+        RX_IndexOUT &= RX_IND_MSK;
+        *str = RX_ring[RX_IndexOUT];
+        str++;
+    }
+}
+
+/*// наличие не прочитанных данных в кольцевом буфере приёмника
+uint8_t Get_RX_Data(void)
+{
+	if(RX_IndexIN != RX_IndexOUT) return 1;
+	return 0;
+}*/
+
+/*					#########################		конец блока функций работы с приёмником 	################*/
+
+/*					#########################		начало блока функций работы с передатчиком 	################*/
+
+// Функция очистки кольцевого буфера передатчика
+/*void Clear_TX_Ring(void)
+{
+	cli();
+	TX_IndexIN = 0;
+	TX_IndexOUT = 0;
+	sei();
+}*/
+
+// наличие не прочитанных данных в кольцевом буфере передатчика
+uint8_t Get_TX_Data(void)
+{
+    if(TX_IndexIN != TX_IndexOUT) return 1;
+    return 0;
+}
+
+void USART_TXD(uint8_t data) // Передача байта по UART
+{
+    while (!( UCSR0A & (1 << UDRE0))) {;} 	// Ждем пока не отправятся предыдущие данные
+    UDR0 = data;							// Отпраляем текущие данные
+}
+
+/* void USART_CRLF(void) //передача CR и LF
+{
+	USART_TXD('\r');
+	USART_TXD('\n');
+}*/
+
+/*void arr_to_USART(uint8_t *s ) // Передача массива по UART
+{
+	while(*s)
+	{
+		USART_TXD(*s++);
+	}
+}*/
+
+/*void string_to_USART(const uint8_t *s ) // Передача сроки из флэш по UART
+{
+	while(pgm_read_byte(s))
+	{
+		USART_TXD(pgm_read_byte(s++));
+	}
+}*/
+
+//функция отправки байта в кольцевой буфер передатчика
+void byte_to_TX_Ring(uint8_t byte)
+{
+    if (((TX_IndexIN + 1) & TX_IND_MSK) == TX_IndexOUT)
+    {
+        send_string_to_LCD_XY(tx_ring_ovf, 0, 0);		//###############
+        //string_to_USART (tx_ring_ovf);				//###############
+    }
+    while (((TX_IndexIN + 1) & TX_IND_MSK) == TX_IndexOUT) {;} //если голова догнала хвост, ждём
+    TX_IndexIN++;
+    TX_IndexIN &= TX_IND_MSK;
+    TX_ring[TX_IndexIN] = byte;
+
+}
+
+//функция отправки массива в кольцо передатчика
+void arr_to_TX_Ring(uint8_t *s)
+{
+    while(*s)
+        byte_to_TX_Ring(*s++);
+}
+
+//функция отправки строки из флэш в кольцо передатчика
+void string_to_TX_Ring(const uint8_t *s)
+{
+    while(pgm_read_byte(s))
+        byte_to_TX_Ring(pgm_read_byte(s++));
+}
+
+/*//функция отправки символов CR и LF в кольцо передатчика
+void CRLF_to_TX_Ring(void)
+{
+	byte_to_TX_Ring('\r');
+	byte_to_TX_Ring('\n');
+}*/
+
+/*			################################			конец блока функций работы с передатчиком 			##################*/
+
+
+void USART_Init( unsigned int ubrr)
+{
+    UBRR0H = (uint8_t)(ubrr >> 8);						//скорость 9600
+    UBRR0L = (uint8_t)ubrr;								//скорость 9600
+    UCSR0A = 0;											//обнуляем флаги
+    UCSR0B = (1 << RXEN0)|(1 << TXEN0)|(1 << RXCIE0);	//включаем передачу, приём и прерывания по приёму
+    UCSR0C = (1 << UCSZ01)|(1 << UCSZ00)|(1 << USBS0);	//8 бит, 1 стоп бит
+}
+
+void msg_clr(void)	//очистка msg
+{
+    for (uint8_t j=0; j < MSG_SIZE; j++) {msg[j] = 0;}
+}
+
+void NRESET(void) //сброс модема
+{
+    cli();
+    TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;//очищаем кольца приёма и передачи
+    modem_rdy = 0;						//модем не готов
+    gsm_lvl = 0;						//моргание уровня GSM останавливаем для индикации нерабочего модема
+    RESET.flag_1 = 0;					//войти в первый этап инициализации
+    ans_lim = PWR_UP_ANS_TIMER;			//таймер ожидания ответа 15с
+    msg_clr();							//обнуляем msg
+    mod_ans = 0;						//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+
+    /*если NRESET тянуть на 0 через внешний ключ, то так: (и раскомментировать строку в main) */
+    //RST_PORT |= _BV(RST_PIN_NUM);		//замыкаем ключ сброса
+    //_delay_us(50);
+    //RST_PORT &= ~_BV(RST_PIN_NUM);	//размыкаем ключ сброса
+
+    /*если NRESET тянуть на 0 сразу портом меги, то так:  (и закомментировать строку в main) */
+    RST_PORT &= ~_BV(RST_PIN_NUM);		//ставим 0 на выводе для сброса модема
+    DDR_RST_PORT |= _BV(RST_PIN_NUM);	//вывод для сброса модема активирован на выход - замыкаем NRESET
+    _delay_us(50);
+    DDR_RST_PORT &= ~_BV(RST_PIN_NUM);	//вывод для сброса модема в 3-е состояние - размыкаем NRESET
+
+    ans_cnt = 0;						//запускаем таймер ожидания ответа
+    sei();
+}
+
+uint8_t send_cmd (void)	//HANDLER отправки команды
+{
+    if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
+    {
+        uint8_t cmd_txt[26];
+        strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);		//собираем текст команды
+        if (WR_CMD[cmd_task_T].par != NULL)								//если параметр команды не пустой
+        {
+            strcat_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].par);	//добавляем текст команды
+        }
+        strcat_P ((char*)cmd_txt, (PGM_P) CRLF);	//собираем текст команды и записываем в задачу
+        arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика
+        ans_lim = 180;								//установка времени ожидания ответа
+        UCSR0B |= (1<<UDRIE0);						//разрешение прерывания по опустошению UDR передатчика
+        ans_cnt = 0;								//запускаем таймер ответа
+        WR_CMD[cmd_task_T].step.flag_1 = 1;			//текст команды отправлен в модем
+        return 'S';
+    }
+    else if (WR_CMD[cmd_task_T].step.flag_1)
+    {
+        if (mod_ans == OK)	//если в msg есть ОК
+        {
+            cmd_task_T = (cmd_task_T + 1) & CMD_TASK_IND_MSK;	//удаляем из списка команд
+            queue_T = (queue_T + 1) & QUEUE_IND_MSK;			//удаляем выполненную задачу из очереди
+            mod_ans = 0;										//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            return 'F';
+        }
+        else if (ans_cnt >= ans_lim)
+        {
+            WR_CMD[cmd_task_T].step.flag_1 = 0;	//сброс флага "текст команды отправлен в модем"
+            NRESET();							//сброс модема
+            return 'G';
+        }
+        else return 'H';
+    }
+    else return 'Z';
+}
+
+uint8_t send_sms (void)	//HANDLER отправки смс
+{
+    uint8_t cmd[26];	//временный массив текста команды
+    if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
+    {
+        strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
+        strcat_P ((char*)cmd, (PGM_P) PHONE);
+        strcat_P ((char*)cmd, (PGM_P) QUOTES);
+        strcat_P ((char*)cmd, (PGM_P) CRLF);
+        arr_to_TX_Ring (cmd);
+        ans_lim = 180;							//таймер ожидания ответа 3с
+        UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
+        ans_cnt = 0;							//запускаем таймер ожидания ответа ">"
+        WR_SMS[out_task_T].step.flag_1 = 1;		//запрос на передачу смс отправлен
+        return 'A';
+    }
+    else if (WR_SMS[out_task_T].step.flag_1)	//если запрос на передачу смс был отправлен в модем
+    {
+        if (mod_ans == INVITE)	//если в msg есть ">"
+        {
+            strcat_P ((char*)WR_SMS[out_task_T].sms_txt, (PGM_P) CTRL_Z); //обеспечить \0 в конце текста смс в .sms_txt!!!
+            arr_to_TX_Ring (WR_SMS[out_task_T].sms_txt);
+            ans_lim = 600;							//время ожидания ответа 10с
+            UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
+            ans_cnt = 0;							//запускаем таймер ответа
+            WR_SMS[out_task_T].step.flag_1 = 0;		//сброс флага "запрос на передачу смс отправлен в модем"
+            WR_SMS[out_task_T].step.flag_2 = 1;		//подъём флага "тескт смс отправлен в модем"
+            mod_ans = 0;							//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            return 'B';
+        }
+#ifdef DEBUG
+            else if (ans_cnt < ans_lim)
+			{return 'C';}
+#endif
+        else if (ans_cnt >= ans_lim)
+        {
+            WR_SMS[out_task_T].step.flag_1 = 0;		//сброс флага "запрос на передачу смс отправлен в модем"
+            NRESET();								//сброс модема
+            return 'D';
+        }
+        else return 'X';
+    }
+    else if (WR_SMS[out_task_T].step.flag_2)					//если текст смс был отправлен в модем
+    {
+        if (mod_ans == OK)										//если в msg есть ".....OK"
+        {
+            out_task_T = (out_task_T + 1) & OUT_TASK_IND_MSK;	//удаляем задачу из списка задач на отправку смс
+            queue_T = (queue_T + 1) & QUEUE_IND_MSK;			//удаляем выполненную задачу из очереди
+            mod_ans = 0;										//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            return 'E';
+        }
+#ifdef DEBUG
+            else if (ans_cnt < ans_lim)
+			{return 'F';}
+#endif
+        else if (ans_cnt >= ans_lim)
+        {
+            WR_SMS[out_task_T].step.flag_2 = 0;				//сброс флагов задачи
+            NRESET();										//сброс модема
+            return 'G';
+        }
+        else return 'Y';
+    }
+    else
+        return 'H';
+}
+
+uint8_t read_sms (void)	//HANDLER чтения смс
+{
+    uint8_t cmd[16];														//массив текста команды
+    if (!RD_SMS[inc_task_T].step.flag_1 && !RD_SMS[inc_task_T].step.flag_2) //если первый вход в задачу
+    {
+        strcpy_P ((char*)cmd, (PGM_P) AT_CMGR);					//собираем команду из флэш
+        strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
+        strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
+        arr_to_TX_Ring (cmd);
+        ans_lim = 120;						//таймер ответа 2с
+        UCSR0B |= (1<<UDRIE0);				//разрешение прерывания по опустошению UDR передатчика
+        ans_cnt = 0;						//запускаем таймер ожидания ответа "/r/nOK/r/n"
+        RD_SMS[inc_task_T].step.flag_1 = 1;	//подъём флага "запрос на чтение смс отправлен в модем"
+        return 'A';
+    }
+    else if (RD_SMS[inc_task_T].step.flag_1) //если запрос на чтение смс отправлен в модем
+    {
+        if (mod_ans == OK)	//если в msg есть "/r/nOK/r/n"
+        {
+            strcpy_P ((char*)cmd, (PGM_P) AT_CMGD);					//собираем команду из флэш
+            strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
+            strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
+            arr_to_TX_Ring (cmd);
+            ans_lim = 120;							//таймер ожидания ответа 2с
+            UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
+            ans_cnt = 0;							//запускаем таймер ответа
+            RD_SMS[inc_task_T].step.flag_1 = 0;		//кладём флаг "запрос на чтение смс отправлен в модем"
+            RD_SMS[inc_task_T].step.flag_2 = 1;		//подъём флага "запрос на удаление прочитанного смс отправлен в модем"
+            mod_ans = 0;							//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            return 'B';
+        }
+#ifdef DEBUG
+            else if (ans_cnt < ans_lim)
+			{return 'C';}
+#endif
+        else if (ans_cnt >= ans_lim)
+        {
+            RD_SMS[inc_task_T].step.flag_1 = 0;	//сброс флага "запрос на чтение смс отправлен в модем"
+            NRESET();							//сброс модема
+            return 'D';
+        }
+        else return 'X';
+    }
+    else if (RD_SMS[inc_task_T].step.flag_2) //если запрос на удаление прочитанного смс отправлен в модем
+    {
+        if (mod_ans == OK) //если в msg есть "/r/nOK/r/n"
+        {
+            inc_task_T = (inc_task_T + 1) & INC_TASK_IND_MSK;	//удаляем задачу из списка задач на чтение смс
+            queue_T = (queue_T + 1) & QUEUE_IND_MSK;			//удаляем выполненную задачу из очереди
+            mod_ans = 0;										//обнуляем ответ, чтобы не считать его повторно при фактическом отсутствии
+            return 'E';
+        }
+#ifdef DEBUG
+            else if (ans_cnt < ans_lim)
+			{return 'F';}
+#endif
+        else if (ans_cnt >= ans_lim)
+        {
+            RD_SMS[inc_task_T].step.flag_2 = 0;	//сброс флагов задачи
+            NRESET();							//сброс модема
+            return 'G';
+        }
+        else return 'Y';
+    }
+    else
+        return 'H';
+}
+
+uint8_t parser(void) //разбор текста msg
+{
+    char* txt_ptr;			//указатель на начало искомого текста в тексте смс
+    uint8_t n = 0;			//число найденных +cmti:, их может быть несколько
+    uint8_t  number[3];		//временный массив для порядкового номера смс
+    uint8_t pars_res = 'Z';	//результат работы парсера
+
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 				//если в msg есть r/n/OKr/n:
+    {
+        mod_ans = OK;
+        pars_res = 'O';
+    }
+    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)			//если в msg есть r/n>:
+    {
+        mod_ans = INVITE;
+        pars_res = 'I';
+    }
+
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)	//если в msg есть r/n/+cmgr:
+    {
+        if (strstr_P((const char*)msg, (char*)(PGM_P)PHONE)!=NULL)				//если телефон правильный
+        {
+            for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		 	//очистка массива задания контроллеру
+            uint8_t j = 0;
+            while (((*(txt_ptr + 64 + j)) != '\r') && (j < TODO_MAX))			//копируем текст команды контроллеру из смс
+            {
+                todo_txt[j] = *(txt_ptr + 64 + j);
+                j++;
+            }
+            to_do(); 		//вызываем функцию распознавания команды
+            pars_res = 'R';
+        }
+    }
+
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CSQ))!=NULL) //если в строке есть r/n/+csq:_
+    {
+        uint8_t tmp[3];						//временный массив приёма символов цифр уровня сигнала
+        uint8_t j = 0;
+        while (isdigit(*(txt_ptr + 8 + j)))	//переносим цифровые символы после r/n/+csq:_ в массив
+        {
+            tmp[j] = *(txt_ptr + 8 + j);
+            j++;
+        }
+        uint8_t lev = atoi_fast (tmp);					// переводим символы в число == уровню сигнала
+        if (lev > 0 && lev < 6)        	{gsm_lvl = 2;}	//0-25% - одна вспышка
+        else if (lev >= 6 && lev < 9)   {gsm_lvl = 4;}	//25-50% - две вспышки
+        else if (lev >= 9 && lev < 16)  {gsm_lvl = 6;}	//50-75% - три вспышки
+        else if (lev >= 16 && lev <= 31){gsm_lvl = 8;}	//75-100% - четыре вспышки
+        else {gsm_lvl = 0;}								//нет сигнала, не моргает
+        pars_res = 'Q';
+    }
+
+    do	//ищем все r/n/+cmti:_
+        if ((txt_ptr = strstr_P((const char*)(msg + n), (PGM_P) ANS_CMTI))!=NULL)	//если в msg есть r/n/+cmti:
+        {
+            uint8_t j = 0;
+            while (isdigit(*(txt_ptr + 14 + j)))	//если символы после r/n/+cmti: "SM", - цифры, заносим № входящего смс в задачу чтения смс
+            {
+                number[j] = *(txt_ptr + 14 + j);
+                j++;
+            }
+            number[j] = '\0';		//завершающий 0
+            inc_to_queue (number);	//ставим в очередь задание на чтение смс
+            n += 15;				//смещение для поиска +cmti: в оставшейся части строки
+            pars_res = 'T';
+        }
+    while (txt_ptr != NULL);
+    msg_clr();
+    return pars_res;
+}
+
+void inc_to_queue (uint8_t* arr)	//постановка в очередь задачи чтения смс
+{
+    if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((inc_task_H + 1) & INC_TASK_IND_MSK) != inc_task_T)) 	//если голова не догнала хвост
+    {
+        for (uint8_t j=0; j<3; j++)							//копируем номер смс в структуру задачи
+        {
+            RD_SMS[inc_task_H].sms_num[j] = arr[j];
+        }
+        //обнуляем флаги процесса
+        RD_SMS[inc_task_H].step.flag_1 = RD_SMS[inc_task_H].step.flag_2 = RD_SMS[inc_task_H].step.flag_3 = RD_SMS[inc_task_H].step.flag_4
+                = RD_SMS[inc_task_H].step.flag_5 = RD_SMS[inc_task_H].step.flag_6 = RD_SMS[inc_task_H].step.flag_7 = RD_SMS[inc_task_H].step.flag_8 = 0;
+        inc_task_H = (inc_task_H + 1) & INC_TASK_IND_MSK;	//сдвигаем индекс головы списка заданий на чтение смс
+        HANDLERS[queue_H] = read_sms;						//ставим в очередь задание прочитать смс
+        queue_H = (queue_H + 1) & QUEUE_IND_MSK;			//сдвигаем индекс головы очереди заданий
+    }
+    else
+    {
+        if  (((inc_task_H + 1) & INC_TASK_IND_MSK) == inc_task_T)
+        {
+            send_string_to_LCD_XY (inc_ring_ovf, 0, 0);	//выводим "Вх.буф.полный!"
+            _delay_ms(1000);
+        }
+        if  (((queue_H + 1) & QUEUE_IND_MSK) == queue_T)
+        {
+            send_string_to_LCD_XY (q_ring_ovf, 0, 1);	//выводим "Конв.полный!"
+            _delay_ms(1000);
+        }
+    }
+}
+
+void out_to_queue (uint8_t* str)	//постановка в очередь задачи отправки смс
+{
+    if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((out_task_H + 1) & OUT_TASK_IND_MSK) != out_task_T)) 	//если голова не догнала хвост
+    {
+        strcpy_P ((char*)WR_SMS[out_task_H].sms_txt, (PGM_P)str);	//копируем текст смс в структуру задачи
+        //обнуляем флаги процесса
+        WR_SMS[out_task_H].step.flag_1 = WR_SMS[out_task_H].step.flag_2 = WR_SMS[out_task_H].step.flag_3 = WR_SMS[out_task_H].step.flag_4
+                = WR_SMS[out_task_H].step.flag_5 = WR_SMS[out_task_H].step.flag_6 = WR_SMS[out_task_H].step.flag_7 = WR_SMS[out_task_H].step.flag_8 = 0;
+        out_task_H = (out_task_H + 1) & OUT_TASK_IND_MSK;			//сдвигаем индекс головы списка заданий на отправку смс
+        HANDLERS[queue_H] = send_sms;								//ставим в очередь задание отправить смс
+        queue_H = (queue_H + 1) & QUEUE_IND_MSK;					//сдвигаем индекс головы очереди заданий
+    }
+    else
+    {
+        if  (((out_task_H + 1) & OUT_TASK_IND_MSK) == out_task_T)
+        {
+            send_string_to_LCD_XY (out_ring_ovf, 0, 0);	//выводим "Исх.буф.полный!"
+            _delay_ms(1000);
+        }
+        if  (((queue_H + 1) & QUEUE_IND_MSK) == queue_T)
+        {
+            send_string_to_LCD_XY (q_ring_ovf, 0, 1);	//выводим "Конв.полный!"
+            _delay_ms(1000);
+        }
+    }
+}
+
+void cmd_to_queue (uint8_t *cmd, uint8_t *par)	//постановка в очередь задачи отправки команды
+{
+    if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((cmd_task_H + 1) & CMD_TASK_IND_MSK) != cmd_task_T)) 	//если голова не догнала хвост
+    {
+        WR_CMD[cmd_task_H].cmd = cmd;		//записываем указатель на текст команды в задачу
+        WR_CMD[cmd_task_H].par = par;		//записываем указатель на параметр команды в задачу
+        //обнуляем флаги процесса
+        WR_CMD[cmd_task_H].step.flag_1 = WR_CMD[cmd_task_H].step.flag_2 = WR_CMD[cmd_task_H].step.flag_3 = WR_CMD[cmd_task_H].step.flag_4
+                = WR_CMD[cmd_task_H].step.flag_5 = WR_CMD[cmd_task_H].step.flag_6 = WR_CMD[cmd_task_H].step.flag_7 = WR_CMD[cmd_task_H].step.flag_8 = 0;
+        cmd_task_H = (cmd_task_H + 1) & CMD_TASK_IND_MSK;				//сдвигаем индекс головы списка заданий на отправку команды
+        HANDLERS[queue_H] = send_cmd;									//ставим в очередь задание отправить команду
+        queue_H = (queue_H + 1) & QUEUE_IND_MSK;						//сдвигаем индекс головы очереди заданий
+    }
+    else
+    {
+        if  (((cmd_task_H + 1) & CMD_TASK_IND_MSK) == cmd_task_T)
+        {
+            send_string_to_LCD_XY (cmd_ring_ovf, 0, 0);	//выводим "Ком.буф.полный!"
+            _delay_ms(1000);
+        }
+        if  (((queue_H + 1) & QUEUE_IND_MSK) == queue_T)
+        {
+            send_string_to_LCD_XY (q_ring_ovf, 0, 0);	//выводим "Конв.полный!"
+            _delay_ms(1000);
+        }
+    }
+}
+
+void to_do (void) //тестовый модуль разбора и выполнения команды
+{
+    if (todo_txt[0]=='r' && todo_txt[1]=='e' && todo_txt[2]=='q' && todo_txt[3]=='u' && todo_txt[4]=='e' && todo_txt[5]=='s' && todo_txt [6] == 't')
+    {
+        out_to_queue ((uint8_t*)(PSTR("answer")));
+    }
+    else
+    {
+        lcd_clr();
+        send_string_to_LCD_XY (com_error, 0, 0);
+        _delay_ms (1500);
+    }
+}
+
+/*			################################			начало блока обработчиков прерываний				##################*/
+
+ISR(USART_RX_vect)	// Обработчик прерывания для приёмника по приходу данных в UDR0
+{
+    uint8_t temp;				//временная переменная для приёма из UDR0	#################
+    uint8_t wr_err;				//код успешности записи в кольцо			#################
+    pause_cnt = 0;				//сброс счётчика паузы в ISR(TIMER0_OVF_vect) после приёма очередного байта #############
+    if(UCSR0A & (1 << FE0))		// Ошибка кадрирования, не пишем новые данные, сообщаем
+    {
+        send_string_to_LCD_XY(frame_err, 0, 0);
+        //string_to_USART (frame_err);#############
+        _delay_ms(1500);
+    }
+    else
+    {
+        temp = UDR0;
+        wr_err = UDR_to_RX_Ring(temp);		// запрашиваем запись в кольцо и принимаем код успешности
+        if(wr_err == 1)						//при ошибке переполнения выводим сообщение, данные в UDR_to_RX_Ring не записаны
+        {
+            send_string_to_LCD_XY(rx_ring_ovf, 0, 0);
+            //string_to_USART (rx_ring_ovf);	#############
+            _delay_ms(1500);
+        }
+    }
+}
+
+ISR (USART_UDRE_vect)  // Обработчик прерывания по опустошению UDR передатчика
+{
+    TX_IndexOUT++;
+    TX_IndexOUT &= TX_IND_MSK;		//проверка маски кольцевого буфера
+    UDR0 = TX_ring[TX_IndexOUT];	//запись из кольцевого буфера в UDR
+    if (!Get_TX_Data())				//если буфер уже пуст
+    {
+        UCSR0B &= ~(1<<UDRIE0); 	//запрет прерывания по опустошению UDR передатчика
+    }
+}
+
+ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
+{
+    int_cnt++; //счётчик прерываний
+    if (int_cnt == 2) //при максимальном делителе таймера 1024 нужно доп.делитель на 2, чтобы иметь 30Гц
+    {
+        BTN_SCAN (); //проверяем кнопку
+        int_cnt = 0; //начинаем новый отсчёт
+    }
+
+    if (delay_cnt < IND_PAUSE)
+    {delay_cnt++;}//счётчик задержки 2c для индикации
+
+    if (wait_timer < WAIT_LIM)
+    {wait_timer++;}//счётчик паузы 15c на действия пользователя
+
+    flash_cnt++;		//счётчик для генерации вспышек индикации уровня сигнала
+    if (flash_cnt == 10)
+    {
+        flash_cnt = 0;
+        if (!pause_num)
+        {
+            if (flash_num < gsm_lvl)	//################### серия вспышек равна gsm_lvl/2
+            {
+                flash_num++;			//###############
+                PORTB ^= _BV(LED_PIN_NUM);
+            }
+            else
+            {
+                flash_num = 0;
+                pause_num++;
+                PORTB &= ~_BV(LED_PIN_NUM);
+            }
+        }
+        else
+        {
+            if (pause_num >= 16){pause_num = 0;}	//###############
+            else {pause_num++;}						//##############
+        }
+    }
+
+    if (time_gsm < GSM_LVL_TIME)
+    {time_gsm++;}			//счётчик интервалов запросов GSM #############
+    else if (time_gsm == GSM_LVL_TIME)
+    {
+        time_gsm +=1;			//чтобы при следующем прерывании сюда не заходил, пока не сбросится в main
+        gsm_lvl_req = 1;		//ставим флаг - отправить запрос уровня GSM
+    }
+
+    if (pause_cnt < PAUSE_CNT_MAX)
+    {pause_cnt++;} 			//счётчик паузы после приёма последнего байта в кольцо приёмника #############
+    else if (pause_cnt == PAUSE_CNT_MAX)
+    {
+        //byte_to_TX_Ring(0x13);	//XOFF
+        //UCSR0B |= (1<<UDRIE0);	//разрешение прерывания по опустошению UDR передатчика
+        USART_TXD (0x13);		//XOFF прямая отправка
+        msg_upld = 1;			//ставим флаг прихода новой посылки
+        pause_cnt += 1;			//чтобы при следующем прерывании сюда не заходил, пока не сбросится в ISR(USART_RX_vect)
+    }
+
+    if (ans_cnt < ans_lim) {ans_cnt++;}		//счётчик интервала для ответа модема на команду или при сбросе ##############
+}
+/*			################################			конец блока обработчиков прерываний				##################*/
+
 void menu(uint8_t* qty, uint8_t* active) // КА меню для удаления/добавления/вставки устройств
 {
     uint8_t  i, j = 0;									// счетчики, для массивов i - строки, j - столбцы
@@ -1206,44 +1953,7 @@ void menu(uint8_t* qty, uint8_t* active) // КА меню для удаления/добавления/вста
     return;
 }
 
-ISR(TIMER0_OVF_vect) //обработчик прерывания таймера 0
-{
-    int_cnt++; //счётчик прерываний
-    if (int_cnt == 2) //при максимальном делителе таймера 1024 нужно доп.делитель на 2, чтобы иметь 30Гц
-    {
-        BTN_SCAN (); //проверяем кнопку
-        int_cnt = 0; //начинаем новый отсчёт
-    }
 
-    if (delay_cnt < IND_PAUSE)
-    {delay_cnt++;}//счётчик задержки 2c для индикации
-
-    if (wait_timer < WAIT_LIM)
-    {wait_timer++;}//счётчик паузы 15c на действия пользователя
-
-    flash_cnt++; //счётчик для вспышек индикации уровня сигнала
-    if (flash_cnt == 10)
-    {
-        flash_cnt = 0;
-        if (!pause_num)
-        {
-            if (flash_num++ < gsm_lvl)
-                PORTB ^= _BV(LED_PIN_NUM);
-            else
-            {
-                flash_num = 0;
-                pause_num++;
-                PORTB &= ~_BV(LED_PIN_NUM);
-            }
-        }
-        else
-        {
-            if (pause_num++ >= 16)
-                pause_num = 0;
-        }
-    }
-    //time_gsm++; //счётчик интервалов 30c запросов GSM, сбрасываается в main
-}
 
 //начало основой программы
 int main (void)
@@ -1251,11 +1961,11 @@ int main (void)
     uint8_t i = 0;								// счетчик "по вертикали", в т.ч. порядковый номер устройства в списке
     unsigned char j = 0;						// счетчик "по горизонтали"
     unsigned char temperature[5];				// массив байтов температуры LB и HB
-    uint16_t temp_int = 0; 							// целая часть температуры
-    unsigned char temp_float = 0; 					// дробная часть температуры
+    uint16_t temp_int = 0; 						// целая часть температуры
+    unsigned char temp_float = 0; 				// дробная часть температуры
     int8_t temp_int_signed; 					// целая часть т-ры со знаком для сравнения с пороговыми значениями
     unsigned int temp; 							// временная переменная для перевода из дополнительного кода в прямой при "-" температуре
-    unsigned char temp_sign = 0; 					// признак знака температуры
+    unsigned char temp_sign = 0; 				// признак знака температуры
     uint16_t Number = 0; 						// сюда попадёт значение температуры
     uint8_t Dig_1, Dig_2, Dig_3, sign = 0;		// переменные для кодов символов цифр температуры и символа знака
     uint8_t n = 0;								// для количества записанных в епром устройств
@@ -1264,8 +1974,17 @@ int main (void)
     int8_t last_t[n_max];						// массив целых частей последних измеренных температур со знаком
     uint8_t next_i = 0;							// номер следующего устройства, которое выводится на lcd
     uint8_t stage = 0;							// состояние автомата индикации
-    uint8_t lines_n = 0;							// количество строк кадра, передаётся в функцию Display
+    uint8_t lines_n = 0;						// количество строк кадра, передаётся в функцию Display
     uint8_t menu_act = 0;						// флаг фхода в меню
+
+    cli();
+    modem_rdy = 0;								//при старте по умолчанию модем не готов
+    RESET.flag_1 = 0;							//при старте делаем инициализацию модема
+    msg_upld = 0;								//запрет выгрузки в msg
+    pause_cnt = PAUSE_CNT_MAX + 1;				//таймер паузы приёма байтов в кольцо приёмника остановлен
+    ans_lim = PWR_UP_ANS_TIMER;					//таймер ответа при инициализации модема
+    time_gsm = GSM_LVL_TIME + 1;				//счётчик интервалов запросов уровня gsm остановлен
+    gsm_lvl_req = 1;							//выполнить запрос уровня gsm после инициализации модема
 
     // LCD_COM_PORT_DDR |= (1<<RS)|(1<<EN); 	// линии RS и EN выходы, раскомм. если DAT и COM цеплять на разные порты
     // LCD_COM_PORT = 0x00;						// ставим 0 в RS и EN, раскомментировать если DAT и COM цеплять на разные порты
@@ -1275,15 +1994,25 @@ int main (void)
     lcd_init();									// Инициализация дисплея
 
     DDR_LED_PORT |= _BV(LED_PIN_NUM); 			// ставим 1 - пин led активирован на выход
+    DDR_SRC_PORT &= ~_BV(SRC_PIN_NUM);			// ставим 0 - пин кнопки активирован на вход
+    SRC_PORT |= _BV(SRC_PIN_NUM);				// ставим 1 - внутр. подтяжка к +
+    DDR_RST_PORT &= ~_BV(RST_PIN_NUM);			// вывод для сброса модема в 3-е состояние - размыкаем NRESET
+    /*раскомментировать, если NRESET на 0 через внешний ключ, см. ф-цию. NRESET*/
+    //DDR_RST_PORT |= _BV(RST_PIN_NUM);			//вывод для сброса модема активирован на выход
 
     TIMSK0 |= (1<<TOIE0);						// разрешаем прерывание по переполнению
     TCCR0B |= (1<<CS02) | (1<<CS00);			// делитель частоты 1024
     TCCR0B &= ~(1<<CS01);						// делитель частоты 1024
     TCCR0A &= ~(1<<WGM00) & ~(1<<WGM01);		// режим работы "normal"
-    sei();
 
-    DDR_SRC_PORT &= ~_BV(SRC_PIN_NUM);			// ставим 0 - пин кнопки активирован на вход
-    SRC_PORT |= _BV(SRC_PIN_NUM);				// ставим 1 - внутр. подтяжка к +
+    USART_Init(MYUBRR);							//включаем UART
+    TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;// Сбросить к/буферы приёмника и передатчика
+    msg_clr();									//очистка msg
+    ans_cnt = 0;								// запуск таймера ожидания ответа модема после включения/сброса
+    cmd_to_queue (AT_CMGD, TEXT_1_4);			// добавляем в список команд "удалить все смс"
+    sei();										// глобально разрешаем прерывания
+
+
 
     if (!(SRC_PIN & src_msk))					// если на пине 0, т.е кнопка нажата, делаем полный поиск устройств на шине и перезапись найденного в епром
     {
@@ -1565,9 +2294,134 @@ int main (void)
                 delay_cnt = IND_PAUSE;		// чтобы вход в меню сразу после нажатия, иначе будет ждать окончания паузы индикации
                 i = next_i = stage = 0;		// чтобы после выхода из меню опрос и индикация начались с первого устройства (от 0)
             }
-            else {press_time = 0;}			//если нажатие короткое, пока ничего не делаем? обнуляем факт нажатия
+            // else {press_time = 0;}			//если нажатие короткое, пока ничего не делаем? обнуляем факт нажатия
         }
 
         menu (&n, &menu_act);				//вызываем КА меню, внутри проверка menu_act, если 0 - выход.
+
+        if (msg_upld)						//если поднят флаг прихода новой посылки
+        {
+            uint8_t pars_res = 0;			//результат работы парсера
+            uint8_t num = RX_IndexNumber(); //сколько байт в кольцевом буфере
+            RX_Ring_to_Str(msg, num);		//выгружаем из кольца в msg
+            msg_upld = 0;					//обнуляем флаг прихода новой посылки
+            //byte_to_TX_Ring(0x11);			//XON
+            //UCSR0B |= (1<<UDRIE0);			//разрешение прерывания по опустошению UDR передатчика
+            USART_TXD (0x11);					//XON прямая отправка
+            if (modem_rdy)					//парсер вызывется только при активном модеме
+            {
+                pars_res = parser();		//разбираем текст в msg
+#ifdef DEBUG
+                lcd_dat_XY(pars_res, 7, 1); //выводим признак результатата работы парсинга
+#endif
+            }
+        }
+
+        if (!modem_rdy)		//если модем не готов(где-то инициирован сброс и снят флаг)
+        {
+            if (!RESET.flag_1)	//первый заход после сброса
+            {
+                // send_string_to_LCD_XY (sim900, 0, 0);
+                // send_string_to_LCD_XY (not_rdy, 7, 0);
+                if (strstr_P((const char*)msg, (PGM_P) CALL_RDY) != NULL)//если в msg есть Ready\r\n
+                {
+                    msg_clr();
+                    string_to_TX_Ring (AT_BUSY);
+                    string_to_TX_Ring (CRLF);	//отправляем AT+GSMBUSY=1
+                    ans_lim = 120;				//таймер ответа 1с
+                    UCSR0B |= (1<<UDRIE0);		//разрешение прерывания по опустошению UDR передатчика
+                    ans_cnt = 0;				//запускаем таймер ожидания ответа от модема
+                    RESET.flag_1 = 1;			//поднимаем флаг "запрет входящих звонков отправлен в модем"
+#ifdef DEBUG
+                    lcd_dat_XY((0x35), 4, 1);	//вывод символа 5 на lcd
+					_delay_ms(1500);
+#endif
+                }
+#ifdef DEBUG
+                    else if (ans_cnt < ans_lim)
+				{
+					lcd_dat_XY('i', 5, 1);		//вывод символа i на lcd
+					_delay_us(50);
+				}
+#endif
+                else if (ans_cnt >= ans_lim)
+                {
+#ifdef DEBUG
+                    lcd_dat_XY((0x36), 6, 1);	//вывод символа 6 на lcd
+					_delay_us(50);
+#endif
+                    NRESET();	//сброс модема
+                }
+            }
+            else if(RESET.flag_1)	//ждём ОК в ответ на AT+GSMBUSY=1
+            {
+                if (strstr_P((const char*)msg, (PGM_P) ANS_OK) != NULL)	//если в msg есть "...OK"
+                {
+                    msg_clr();
+                    modem_rdy = 1;	//модем готов
+                    lcd_clr();
+                    _delay_us(50);
+                    // send_string_to_LCD_XY (not_rdy, 6, 0);
+                    // send_string_to_LCD_XY (sim900, 2, 0);//смещаем чтобы убрать "не" из "не готов"
+#ifdef DEBUG
+                    lcd_dat_XY((0x39), 9, 1);	//вывод символа 9 на lcd
+#endif
+                }
+#ifdef DEBUG
+                    else if (ans_cnt < ans_lim)
+				{
+					lcd_dat_XY('h', 5, 1);		//вывод символа h на lcd
+					//_delay_us(50);
+				}
+#endif
+                else if (ans_cnt >= ans_lim)
+                {
+#ifdef DEBUG
+                    lcd_dat_XY((0x37), 7, 1);	//вывод символа 7 на lcd
+#endif
+                    NRESET();	//сброс модема
+                }
+            }
+        }
+
+        else	//если модем готов, идём в тело главного цикла
+        {
+            if (queue_T != 	queue_H)
+            {
+                handl_res = HANDLERS[queue_T]();
+#ifdef DEBUG
+                lcd_dat_XY(handl_res, 8, 1); //вывод на lcd результатов из обработчиков
+#endif
+            }
+
+            if (gsm_lvl_req)				//если в прерывании установился флаг отправки запроса уровня
+            {
+                cmd_to_queue (AT_CSQ, NULL);//ставим задачу
+                gsm_lvl_req = 0;			//обнуляем флаг
+                time_gsm = 0;				//запускаем таймер запросов уровня gsm в прерывании
+            }
+
+            switch (press_time) // блок детектирования нажатия кнопки и задач по длительности жима
+            {
+                case QUICK :
+                {
+                    out_to_queue (quick);	//отправляем текст QUICK
+                    lcd_clr(); 				//очистка дисплея
+                    send_string_to_LCD_XY(quick, 0, 0);
+                    press_time = 0;
+                    break;
+                }
+                case SLOW :
+                {
+                    out_to_queue (slow);	//отправляем текст SLOW
+                    lcd_clr();				// очистка дисплея
+                    send_string_to_LCD_XY (slow, 0, 0);
+                    press_time = 0;
+                    break;
+                }
+                case 0 :
+                    break;
+            }
+        }
     }	//конец бесконечного цикла
-}	//конец функции
+}	//конец функции main
