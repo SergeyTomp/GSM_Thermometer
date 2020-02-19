@@ -78,106 +78,106 @@
 #define RST_PIN_NUM			2 					// Номер вывода, к которому подключен вывод сброса модема, для макроса _BV()
 
 // блок текстовых сообщений во флэш
-unsigned char absence[] 		PROGMEM = "Нет датчиков";		// ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
-unsigned char no_answer[] 		PROGMEM = "Нет ответа датч.";	// ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
-unsigned char present_n[] 		PROGMEM = "Найдено датч. ";		// количество устройств, опознанных при первичной дешифрации адресов
-unsigned char dev_excess[] 		PROGMEM = "Много датчиков";		// ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
-unsigned char error[] 			PROGMEM = "Ошибка CRC-ID ";		// ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
-unsigned char init_n[]			PROGMEM = "Исправн.датч. ";		// количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
-unsigned char init_srch[] 		PROGMEM = "Выполнить поиск?";	// ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
-unsigned char scratch_err[] 	PROGMEM = "Ош.CRC-блкн. ";		// ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
-unsigned char no_answer_n[] 	PROGMEM = "Нет ответа ";		// ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится имя датчика
-unsigned char ow_check[] 		PROGMEM = "Опрос линии";		// сообщение в main при нормальном входе во время переклички
-unsigned char correction[] 		PROGMEM = "Корректировка";		// сообщение в add_ID при входе
-unsigned char subst_add[] 		PROGMEM = "Замена/добавл-е";	// сообщение в add_ID при входе в блок замены/удаления
-unsigned char total_qty[] 		PROGMEM = "Всего устройств";	// сообщение в add_ID перед началом поиска
-unsigned char plug_in[] 		PROGMEM = "Подключите устр.";	// сообщение в add_ID перед началом поиска
-unsigned char press_btn[] 		PROGMEM = "и нажмите кнопку";	// сообщение в add_ID перед началом поиска
-unsigned char mem_full[]		PROGMEM = "Память заполнена";	// сообщение в add_ID, если количество датчиков уже 50, а неактивных нет
-unsigned char new_dev_fnd[] 	PROGMEM = "Найдено новое";		// верхняя строка сообщения в add_ID, если найдено новое
-unsigned char nev_dev_add[] 	PROGMEM = "Добавлено новое";	// верхняя строка сообщения в add_ID в конце блока добавления
-unsigned char element[] 		PROGMEM = "устройство";			// нижняя строка сообщения в add_ID, если найдено или добавлено новое
-unsigned char substitute[] 		PROGMEM = "Заменить?";			// сообщение в add_ID в блоке замены, если нашли неактивное устр-во, выводится имя датчика
-unsigned char add_to_end[] 		PROGMEM = "Добавить?";			// сообщение в add_ID в начале блока добавления
-unsigned char done[] 			PROGMEM = "Замена выполнена";	// сообщение в add_ID после вставки взамен неактивного
-unsigned char no_new[] 			PROGMEM = "Новых устр-в нет";	// сообщение в add_ID если прошли весь цикл поиска ноовых ID
-unsigned char delete[] 			PROGMEM = "Удалить?";			// сообщение - первый пункт меню Корректировка
-unsigned char del_done[] 		PROGMEM = "Удалено";			// сообщение по факту удаления устройства
-unsigned char t_error[] 		PROGMEM = "Wrong temp.limit";	// сообщение при попытке записать некорректную температуру в датчик
-unsigned char com_error[] 		PROGMEM = "Incorrect command";	// сообщение при ошибке в тексте команды
-unsigned char frame_err[]		PROGMEM = "Ошибка приёма!"; 	// сообщение при ошибке приёма байта по Rx
-unsigned char name_error_ren[] 	PROGMEM = "REN-Incorrect name";	// сообщение при ошибочном имени в тексте команды REN...
-unsigned char name_error_al[] 	PROGMEM = "AL-Incorrect name";	// сообщение при ошибочном имени в тексте команды AL...
-unsigned char name_error_sms[] 	PROGMEM = "SMS-Incorrect name";	// сообщение при ошибочном имени в тексте команды SMS...
-unsigned char name_error[] 		PROGMEM = "Incorrect name";		// сообщение при ошибочном имени в тексте команды
-unsigned char rename_ok[] 		PROGMEM = "Rename done";		// сообщение при успешном изменении имени
-unsigned char t_min[] 			PROGMEM = "Tmin";				// часть строки при подтверждении изменения минимального порогоа температуры
-unsigned char t_max[] 			PROGMEM = "Tmax";				// часть строки при подтверждении изменения максимального порога температуры
-unsigned char t_low[] 			PROGMEM = "T<";					// часть строки при сообщениии о снижении температуры ниже минимального порога
-unsigned char t_high[] 			PROGMEM = "T>";					// часть строки при сообщениии о повышении температуры выше максимального порога
-unsigned char sms_send []		PROGMEM = "SMS";				// часть строки при подтверждении включения sms о выходе температуры за пределы
-unsigned char on []				PROGMEM = "ON";					// часть строки при подтверждении включения sms о выходе температуры за пределы
-unsigned char off []			PROGMEM = "OFF";				// часть строки при подтверждении включения sms о выходе температуры за пределы
-unsigned char blank []			PROGMEM = " ";					// пробел, где нужно
-unsigned char crash []			PROGMEM = "FAIL!";				// часть строки при сообщении об аварии на линии
-unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";	// сообщение на lcd при переполнении TX_ring
-unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";	// сообщение на lcd при переполнении RX_ring
-unsigned char quick[]			PROGMEM = "QUICK";				// тестовое сообщение
-unsigned char slow[]			PROGMEM = "SLOW";				// тестовое сообщение
-/* unsigned char sim900[]			PROGMEM = "SIM900 ";			// тестовое сообщение, использовалось при отладке СИМ900 */
-/* unsigned char not_rdy[]			PROGMEM = "не готов";			// тестовое сообщение, использовалось при отладке СИМ900 */
-unsigned char out_ring_ovf[]	PROGMEM = "Исх.буф.полный!";	// сообщение на lcd при переполнении очереди задач на отправку
-unsigned char inc_ring_ovf[]	PROGMEM = "Вх.буф.полный!";		// сообщение на lcd при переполнении очереди задач на приём/чтение
-unsigned char cmd_ring_ovf[]	PROGMEM = "Ком.буф.полный!";	// сообщение на lcd при переполнении очереди команд
-unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";		// сообщение на lcd при переполнении магазина задач
-unsigned char gsm_scale[]		PROGMEM = {0,3,6,10,13,16,19,23,26,29,32,35,39,42,45,48,52,55,58,61,65,68,71,74,77,81,84,87,90,94,97,100};//уровни сигнала
-unsigned char gsm[]				PROGMEM = "GSM";				// часть строки в сообщении про уровень сигнала
-unsigned char BEELINE[]			PROGMEM = "Bee";				// Билайн
-unsigned char MTS[]				PROGMEM = "MTS";				// МТС
-unsigned char MEGAFON[]			PROGMEM = "Meg";				// Мегафон
-unsigned char TELE2[]			PROGMEM = "Tel";				// Теле2
-unsigned char USERS[]			PROGMEM = "USERS";				// начало смс со списком телефонов пользователей
-unsigned char DELETE[]			PROGMEM = "DELETE";				// начало смс об удалении пользователей
-unsigned char DENIED[]			PROGMEM = "ACCESS DENIED";		// смс об отказе в доступе
+const unsigned char absence[] 		    PROGMEM = "Нет датчиков";		// ошибка на этапе первой инициализации датчиков перед входом в алгоритм дешифрации адресов
+const unsigned char no_answer[] 		PROGMEM = "Нет ответа датч.";	// ошибка на старте дешифрации адресов после чтения первых двух тайм-слотов
+const unsigned char present_n[] 		PROGMEM = "Найдено датч. ";		// количество устройств, опознанных при первичной дешифрации адресов
+const unsigned char dev_excess[] 		PROGMEM = "Много датчиков";		// ошибка в процессе первичной дешифрации адресов, если количество датчиков превысит 50
+const unsigned char error[] 			PROGMEM = "Ошибка CRC-ID ";		// ошибка на этапе проверки CRC ID после первичной дешифрации адресов, выводится № датчика,
+const unsigned char init_n[]			PROGMEM = "Исправн.датч. ";		// количество датчиков, прошедших проверку CRC после первичной дешифрации адресов
+const unsigned char init_srch[] 		PROGMEM = "Выполнить поиск?";	// ошибка при отсутствии в епром данных датчиков, если не проводилась первичная дешифрация адресов
+const unsigned char scratch_err[] 	    PROGMEM = "Ош.CRC-блкн. ";		// ошибка при проверке CRC данных, прочитанных из блокнота, выводится № датчика
+const unsigned char no_answer_n[] 	    PROGMEM = "Нет ответа ";		// ошибка на этапе чтения чтения блокнота при перекличке в main - если датчик не ответил, то конф.байт == FF, выводится имя датчика
+const unsigned char ow_check[] 		    PROGMEM = "Опрос линии";		// сообщение в main при нормальном входе во время переклички
+const unsigned char correction[] 		PROGMEM = "Корректировка";		// сообщение в add_ID при входе
+const unsigned char subst_add[] 		PROGMEM = "Замена/добавл-е";	// сообщение в add_ID при входе в блок замены/удаления
+const unsigned char total_qty[] 		PROGMEM = "Всего устройств";	// сообщение в add_ID перед началом поиска
+const unsigned char plug_in[] 		    PROGMEM = "Подключите устр.";	// сообщение в add_ID перед началом поиска
+const unsigned char press_btn[] 		PROGMEM = "и нажмите кнопку";	// сообщение в add_ID перед началом поиска
+const unsigned char mem_full[]		    PROGMEM = "Память заполнена";	// сообщение в add_ID, если количество датчиков уже 50, а неактивных нет
+const unsigned char new_dev_fnd[] 	    PROGMEM = "Найдено новое";		// верхняя строка сообщения в add_ID, если найдено новое
+const unsigned char nev_dev_add[] 	    PROGMEM = "Добавлено новое";	// верхняя строка сообщения в add_ID в конце блока добавления
+const unsigned char element[] 		    PROGMEM = "устройство";			// нижняя строка сообщения в add_ID, если найдено или добавлено новое
+const unsigned char substitute[] 		PROGMEM = "Заменить?";			// сообщение в add_ID в блоке замены, если нашли неактивное устр-во, выводится имя датчика
+const unsigned char add_to_end[] 		PROGMEM = "Добавить?";			// сообщение в add_ID в начале блока добавления
+const unsigned char done[] 			    PROGMEM = "Замена выполнена";	// сообщение в add_ID после вставки взамен неактивного
+const unsigned char no_new[] 			PROGMEM = "Новых устр-в нет";	// сообщение в add_ID если прошли весь цикл поиска ноовых ID
+const unsigned char delete[] 			PROGMEM = "Удалить?";			// сообщение - первый пункт меню Корректировка
+const unsigned char del_done[] 		    PROGMEM = "Удалено";			// сообщение по факту удаления устройства
+const unsigned char t_error[] 		    PROGMEM = "Wrong temp.limit";	// сообщение при попытке записать некорректную температуру в датчик
+const unsigned char com_error[] 		PROGMEM = "Incorrect command";	// сообщение при ошибке в тексте команды
+const unsigned char frame_err[]		    PROGMEM = "Ошибка приёма!"; 	// сообщение при ошибке приёма байта по Rx
+const unsigned char name_error_ren[] 	PROGMEM = "REN-Incorrect name";	// сообщение при ошибочном имени в тексте команды REN...
+const unsigned char name_error_al[] 	PROGMEM = "AL-Incorrect name";	// сообщение при ошибочном имени в тексте команды AL...
+const unsigned char name_error_sms[] 	PROGMEM = "SMS-Incorrect name";	// сообщение при ошибочном имени в тексте команды SMS...
+const unsigned char name_error[] 		PROGMEM = "Incorrect name";		// сообщение при ошибочном имени в тексте команды
+const unsigned char rename_ok[] 		PROGMEM = "Rename done";		// сообщение при успешном изменении имени
+const unsigned char t_min[] 			PROGMEM = "Tmin";				// часть строки при подтверждении изменения минимального порогоа температуры
+const unsigned char t_max[] 			PROGMEM = "Tmax";				// часть строки при подтверждении изменения максимального порога температуры
+const unsigned char t_low[] 			PROGMEM = "T<";					// часть строки при сообщениии о снижении температуры ниже минимального порога
+const unsigned char t_high[] 			PROGMEM = "T>";					// часть строки при сообщениии о повышении температуры выше максимального порога
+const unsigned char sms_send []		    PROGMEM = "SMS";				// часть строки при подтверждении включения sms о выходе температуры за пределы
+const unsigned char on []				PROGMEM = "ON";					// часть строки при подтверждении включения sms о выходе температуры за пределы
+const unsigned char off []			    PROGMEM = "OFF";				// часть строки при подтверждении включения sms о выходе температуры за пределы
+const unsigned char blank []			PROGMEM = " ";					// пробел, где нужно
+const unsigned char crash []			PROGMEM = "FAIL!";				// часть строки при сообщении об аварии на линии
+const unsigned char tx_ring_ovf[]		PROGMEM = "TX-буф. полный!";	// сообщение на lcd при переполнении TX_ring
+const unsigned char rx_ring_ovf[]		PROGMEM = "RX-буф. полный!";	// сообщение на lcd при переполнении RX_ring
+const unsigned char quick[]			    PROGMEM = "QUICK";				// тестовое сообщение
+const unsigned char slow[]			    PROGMEM = "SLOW";				// тестовое сообщение
+/* const unsigned char sim900[]			   PROGMEM = "SIM900 ";			// тестовое сообщение, использовалось при отладке СИМ900 */
+/* const unsigned char not_rdy[]		   PROGMEM = "не готов";			// тестовое сообщение, использовалось при отладке СИМ900 */
+const unsigned char out_ring_ovf[]	    PROGMEM = "Исх.буф.полный!";	// сообщение на lcd при переполнении очереди задач на отправку
+const unsigned char inc_ring_ovf[]	    PROGMEM = "Вх.буф.полный!";		// сообщение на lcd при переполнении очереди задач на приём/чтение
+const unsigned char cmd_ring_ovf[]	    PROGMEM = "Ком.буф.полный!";	// сообщение на lcd при переполнении очереди команд
+const unsigned char q_ring_ovf[]		PROGMEM = "Конв.полный!";		// сообщение на lcd при переполнении магазина задач
+const unsigned char gsm_scale[]		    PROGMEM = {0,3,6,10,13,16,19,23,26,29,32,35,39,42,45,48,52,55,58,61,65,68,71,74,77,81,84,87,90,94,97,100};//уровни сигнала
+const unsigned char gsm[]				PROGMEM = "GSM";				// часть строки в сообщении про уровень сигнала
+const unsigned char BEELINE[]			PROGMEM = "Bee";				// Билайн
+const unsigned char MTS[]				PROGMEM = "MTS";				// МТС
+const unsigned char MEGAFON[]			PROGMEM = "Meg";				// Мегафон
+const unsigned char TELE2[]			    PROGMEM = "Tel";				// Теле2
+const unsigned char USERS[]			    PROGMEM = "USERS";				// начало смс со списком телефонов пользователей
+const unsigned char DELETE[]			PROGMEM = "DELETE";				// начало смс об удалении пользователей
+const unsigned char DENIED[]			PROGMEM = "ACCESS DENIED";		// смс об отказе в доступе
 
 //блок текстовых строк во флэш для работы с модемом
-unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
-unsigned char AT_CMGD[]			PROGMEM = "AT+CMGD=";		// удалить смс ("=1,4" - удалить все)
-unsigned char AT_CMGS[]			PROGMEM = "AT+CMGS=\"";		// послать смс
-unsigned char ANS_ENT[]			PROGMEM = "\r\n> ";			// затем вводим текст
-unsigned char ANS_CMGS[]		PROGMEM = "\r\n+CMGS: ";	// смс отправлено
-unsigned char CTRL_Z[]			PROGMEM = {0x1A, 0};		// Ctrl-Z - символ завершения смс
-unsigned char AT_CMGR[]			PROGMEM = "AT+CMGR=";		// прочитать смс
-unsigned char ANS_CMGR[]		PROGMEM = "\r\n+CMGR: ";	// ответ
-unsigned char AT_BUSY[]			PROGMEM = "AT+GSMBUSY=1";	// запрет всех входящих звонок (1-запрещены, 0 - разрешены)
-unsigned char ANS_CMTI[]		PROGMEM = "\r\n+CMTI: ";	// входящее смс
-unsigned char AT_CSQ[]			PROGMEM = "AT+CSQ";			// запрос уровня сигнала
-unsigned char ANS_CSQ[]			PROGMEM = "\r\n+CSQ: ";		// ответ на запрос уровня сигнала
-unsigned char CRLF[]			PROGMEM = "\r\n";			// символы CRLF
-unsigned char NEW_LN[]			PROGMEM = "\n";				// перенос строки для смс, телефон не переносит по обычным \r\n
-unsigned char TEXT_1_4[]		PROGMEM = "1,4";			// "1,4" - удалить все смс
-//unsigned char PHONE[]			PROGMEM = "+79052135678";	// номер телефона, пока здесь
-unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
-unsigned char CALL_RDY[]		PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
-unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
-unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса с открывающими кавычками номера телефона
-//unsigned char TEXT_100[]		PROGMEM = "#100#\"";		// номер баланса, пока здесь
-unsigned char ANS_CUSD[]		PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
-unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
-unsigned char ANS_COPS[]		PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
-unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
-unsigned char ANS_CPBF[]		PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
-unsigned char USER_0[]			PROGMEM = "ADMIN";			// имя админа
-unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя 1
-unsigned char USER_2[]			PROGMEM = "USER_2";			// имя пользователя 2
-unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans
-unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку
-unsigned char CELL_1[]			PROGMEM = "1,\"";			// запрос на запись в сим в ячейку 1 с открывающими кавычками номера телефона
-unsigned char CELL_2[]			PROGMEM = "2,\"";			// запрос на запись в сим в ячейку 2 с открывающими кавычками номера телефона
-unsigned char CELL_3[]			PROGMEM = "3,\"";			// запрос на запись в сим в ячейку 3 с открывающими кавычками номера телефона
-unsigned char CELL_4[]			PROGMEM = "4,\"";			// запрос на запись в сим в ячейку 4 с открывающими кавычками номера телефона
-unsigned char TEXT_145[]		PROGMEM = "\",145,\"";		// часть запроса на запись телефона в сим с закр. кав. номера и откр. кав. имени
-unsigned char TEXT_129[]		PROGMEM = "\",129,\"";		// часть запроса на запись кода баланса в сим с закр. кав. номера и откр. кав. имени
+const unsigned char ANS_OK[]			PROGMEM = "\r\nOK\r\n";		// ответный ОК
+const unsigned char AT_CMGD[]			PROGMEM = "AT+CMGD=";		// удалить смс ("=1,4" - удалить все)
+const unsigned char AT_CMGS[]			PROGMEM = "AT+CMGS=\"";		// послать смс
+const unsigned char ANS_ENT[]			PROGMEM = "\r\n> ";			// затем вводим текст
+const unsigned char ANS_CMGS[]		    PROGMEM = "\r\n+CMGS: ";	// смс отправлено
+const unsigned char CTRL_Z[]			PROGMEM = {0x1A, 0};		// Ctrl-Z - символ завершения смс
+const unsigned char AT_CMGR[]			PROGMEM = "AT+CMGR=";		// прочитать смс
+const unsigned char ANS_CMGR[]		    PROGMEM = "\r\n+CMGR: ";	// ответ
+const unsigned char AT_BUSY[]			PROGMEM = "AT+GSMBUSY=1";	// запрет всех входящих звонок (1-запрещены, 0 - разрешены)
+const unsigned char ANS_CMTI[]		    PROGMEM = "\r\n+CMTI: ";	// входящее смс
+const unsigned char AT_CSQ[]			PROGMEM = "AT+CSQ";			// запрос уровня сигнала
+const unsigned char ANS_CSQ[]			PROGMEM = "\r\n+CSQ: ";		// ответ на запрос уровня сигнала
+const unsigned char CRLF[]			    PROGMEM = "\r\n";			// символы CRLF
+const unsigned char NEW_LN[]			PROGMEM = "\n";				// перенос строки для смс, телефон не переносит по обычным \r\n
+const unsigned char TEXT_1_4[]		    PROGMEM = "1,4";			// "1,4" - удалить все смс
+//const unsigned char PHONE[]			  PROGMEM = "+79052135678";	// номер телефона, пока здесь
+const unsigned char QUOTES[]			PROGMEM = "\"";				// закрывающие кавычки для добавления в конце телефона при отправке смс
+const unsigned char CALL_RDY[]		    PROGMEM = "Ready\r\n";		// Call Ready - последний URC модема после включения или сброса
+const unsigned char BALANCE[]			PROGMEM = "BALANCE";		// текст смс для запроса баланса
+const unsigned char AT_CUSD[]			PROGMEM = "AT+CUSD=1,";		// USSD запрос баланса с открывающими кавычками номера телефона
+//const unsigned char TEXT_100[]		  PROGMEM = "#100#\"";		// номер баланса, пока здесь
+const unsigned char ANS_CUSD[]		    PROGMEM = "\r\n+CUSD: ";	// ответ на USSD запрос баланса
+const unsigned char AT_COPS[]			PROGMEM = "AT+COPS?";		// запрос оператора
+const unsigned char ANS_COPS[]		    PROGMEM = "\r\n+COPS: ";	// ответ на запрос оператора
+const unsigned char AT_CPBF[]			PROGMEM = "AT+CPBF=";		// запрос поиска на сим по имени
+const unsigned char ANS_CPBF[]		    PROGMEM = "\r\n+CPBF: ";	// ответ на запрос поиска на сим по имени
+const unsigned char USER_0[]			PROGMEM = "ADMIN";			// имя админа
+const unsigned char USER_1[]			PROGMEM = "USER_1";			// имя пользователя 1
+const unsigned char USER_2[]			PROGMEM = "USER_2";			// имя пользователя 2
+const unsigned char BALANS[]			PROGMEM = "BALANS";			// текст balans
+const unsigned char AT_CPBW[]			PROGMEM = "AT+CPBW=";		// запрос на запись в сим в свободную ячейку
+const unsigned char CELL_1[]			PROGMEM = "1,\"";			// запрос на запись в сим в ячейку 1 с открывающими кавычками номера телефона
+const unsigned char CELL_2[]			PROGMEM = "2,\"";			// запрос на запись в сим в ячейку 2 с открывающими кавычками номера телефона
+const unsigned char CELL_3[]			PROGMEM = "3,\"";			// запрос на запись в сим в ячейку 3 с открывающими кавычками номера телефона
+const unsigned char CELL_4[]			PROGMEM = "4,\"";			// запрос на запись в сим в ячейку 4 с открывающими кавычками номера телефона
+const unsigned char TEXT_145[]		    PROGMEM = "\",145,\"";		// часть запроса на запись телефона в сим с закр. кав. номера и откр. кав. имени
+const unsigned char TEXT_129[]		    PROGMEM = "\",129,\"";		// часть запроса на запись кода баланса в сим с закр. кав. номера и откр. кав. имени
 
 
 // блок глобальных переменных и структур
@@ -1621,7 +1621,7 @@ uint8_t parser(void) // разбор текста msg
                 {
                     phones.phone_0[i] = txt_ptr[i];
                 }
-                cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
+                cmd_to_queue ((uint8_t *)AT_CPBW, (uint8_t *)CELL_2, phones.phone_0, (uint8_t *)TEXT_145, (uint8_t *)USER_0, (uint8_t *)QUOTES);	//записываем этот телефон на сим
                 sms_buff.sms_type = ADMIN;									// отправляем подтверждение отправителю
                 sms_buff.person = ADMIN;
                 out_to_queue (&sms_buff);
@@ -1711,8 +1711,8 @@ uint8_t parser(void) // разбор текста msg
             {
                 phones.phone_0[i] = *(txt_ptr + i);
             }
-            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_1, QUOTES);		// запрос поиска номера юзера1
-            cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_2, QUOTES);		// запрос поиска номера юзера2
+            cmd_to_queue ((uint8_t *)AT_CPBF, NULL, NULL, (uint8_t *)QUOTES, (uint8_t *)USER_1, (uint8_t *)QUOTES);		// запрос поиска номера юзера1
+            cmd_to_queue ((uint8_t *)AT_CPBF, NULL, NULL, (uint8_t *)QUOTES, (uint8_t *)USER_2, (uint8_t *)QUOTES);		// запрос поиска номера юзера2
         }
         else if	((strstr_P((const char*)txt_ptr, (PGM_P) USER_1)) != NULL)	// если в тексте ответа модема USER_1, копируем телефон в массив пользователя
         {
@@ -2089,7 +2089,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 if (j == 12)								// если записан + и 12 цифр
                 {
-                    cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	// записываем этот телефон на сим
+                    cmd_to_queue ((uint8_t *)AT_CPBW, (uint8_t *)CELL_2, phones.phone_0, (uint8_t *)TEXT_145, (uint8_t *)USER_0, (uint8_t *)QUOTES);	// записываем этот телефон на сим
                     sms_buff.sms_type = ADMIN;													// отправляем подтверждение админу (старому)
                 }
             }
@@ -2124,7 +2124,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 if (j == 12)													// если записан + и 12 цифр
                 {
-                    cmd_to_queue (AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);	//записываем этот телефон на сим
+                    cmd_to_queue ((uint8_t *)AT_CPBW, (uint8_t *)CELL_3, phones.phone_1, (uint8_t *)TEXT_145, (uint8_t *)USER_1, (uint8_t *)QUOTES);	//записываем этот телефон на сим
                     sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
                 }
             }
@@ -2159,7 +2159,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 if (j == 12)													// если записан + и 12 цифр
                 {
-                    cmd_to_queue (AT_CPBW, CELL_3, phones.phone_2, TEXT_145, USER_2, QUOTES);	//записываем этот телефон на сим
+                    cmd_to_queue ((uint8_t *)AT_CPBW, (uint8_t *)CELL_3, phones.phone_2, (uint8_t *)TEXT_145, (uint8_t *)USER_2, (uint8_t *)QUOTES);	//записываем этот телефон на сим
                     sms_buff.sms_type = MEMBERS;								// отправляем подтверждение админу
                 }
             }
@@ -2205,7 +2205,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 }
                 if (i == 3)												// если получилось три цифры, всё ок
                 {
-                    cmd_to_queue (AT_CPBW, CELL_1, phones.reserv, TEXT_129, BALANS, QUOTES);// отправляем в сим условный номер баланса
+                    cmd_to_queue ((uint8_t *)AT_CPBW, (uint8_t *)CELL_1, phones.reserv, (uint8_t *)TEXT_129, (uint8_t *)BALANS, (uint8_t *)QUOTES);// отправляем в сим условный номер баланса
                 }
                 else													// если не получилось три цифры, неверная команда
                 {
@@ -2219,7 +2219,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 out_to_queue (&sms_buff);
             }
         }
-        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
+        cmd_to_queue ((uint8_t *)AT_CUSD, (uint8_t *)QUOTES, phones.balance, (uint8_t *)QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
     }
 
     else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)		// если в todo_txt есть DELETE
@@ -2231,14 +2231,14 @@ void to_do (void)			// модуль разбора и выполнения команды
             {
                 for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
                 {phones.phone_1[i] = '0';}
-                cmd_to_queue(AT_CPBW, CELL_3, phones.phone_1, TEXT_145, USER_1, QUOTES);// писшем в сим телефон с нулями
+                cmd_to_queue((uint8_t *)AT_CPBW, (uint8_t *)CELL_3, phones.phone_1, (uint8_t *)TEXT_145, (uint8_t *)USER_1, (uint8_t *)QUOTES);// писшем в сим телефон с нулями
                 sms_buff.sms_type = MEMBERS;											// отправляем обновлённый список юзеров
             }
             else if (strstr((const char*)txt_ptr, (char*)phones.phone_2))				// если номер из смс номер есть в массиве
             {
                 for (uint8_t i = 0; i < 12; i++)										// удаляем пользователя
                 {phones.phone_2[i] = '0';}
-                cmd_to_queue(AT_CPBW, CELL_4, phones.phone_2, TEXT_145, USER_2, QUOTES);// писшем в сим телефон с нулями
+                cmd_to_queue((uint8_t *)AT_CPBW, (uint8_t *)CELL_4, phones.phone_2, (uint8_t *)TEXT_145, (uint8_t *)USER_2, (uint8_t *)QUOTES);// писшем в сим телефон с нулями
                 sms_buff.sms_type = MEMBERS;											// отправляем обновлённый список юзеров
             }
             else
@@ -2842,10 +2842,10 @@ int main (void)
     TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;// Сбросить к/буферы приёмника и передатчика
     msg_clr();									// очистка msg
     ans_cnt = 0;								// запуск таймера ожидания ответа модема после включения/сброса
-    cmd_to_queue (AT_CMGD, TEXT_1_4, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд "удалить все смс"
-    cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, USER_0, QUOTES);	// добавляем в стартовый список команд запрос поиска номера админа
-    cmd_to_queue (AT_CPBF, NULL, NULL, QUOTES, BALANS, QUOTES);	// добавляем в стартовый список команд запрос поиска номера баланса
-    cmd_to_queue (AT_COPS, NULL, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд запрос оператора для определения кода баланса
+    cmd_to_queue ((uint8_t *)AT_CMGD, (uint8_t *)TEXT_1_4, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд "удалить все смс"
+    cmd_to_queue ((uint8_t *)AT_CPBF, NULL, NULL, (uint8_t *)QUOTES, (uint8_t *)USER_0, (uint8_t *)QUOTES);	// добавляем в стартовый список команд запрос поиска номера админа
+    cmd_to_queue ((uint8_t *)AT_CPBF, NULL, NULL, (uint8_t *)QUOTES, (uint8_t *)BALANS, (uint8_t *)QUOTES);	// добавляем в стартовый список команд запрос поиска номера баланса
+    cmd_to_queue ((uint8_t *)AT_COPS, NULL, NULL, NULL, NULL, NULL);	// добавляем в стартовый список команд запрос оператора для определения кода баланса
 
     sei();										// глобально разрешаем прерывания
 
@@ -2944,7 +2944,7 @@ int main (void)
                 }
                 init_device();						// сброс датчиков для прекращения передачи данных
                 // преобразуем полученное в значение температуры
-                if (!(temperature[4] == 0xFF))		// если конф.байт станет вдруг ==FF, то датчик замолчал.
+                if (temperature[4] != 0xFF)		// если конф.байт станет вдруг ==FF, то датчик замолчал.
                 {
                     if (buffer.flags.line_alarm) 	// сбрасываем флаг пропадания, если он был поднят в каком-то предыдущем цикле, а датчик проявился
                     {
@@ -3175,7 +3175,7 @@ int main (void)
 
         if (msg_upld)						//если поднят флаг прихода новой посылки
         {
-            uint8_t pars_res = 0;			//результат работы парсера
+//            uint8_t pars_res = 0;			//результат работы парсера
             uint8_t num = RX_IndexNumber(); //сколько байт в кольцевом буфере
             RX_Ring_to_Str(msg, num);		//выгружаем из кольца в msg
             msg_upld = 0;					//обнуляем флаг прихода новой посылки
@@ -3184,7 +3184,7 @@ int main (void)
             USART_TXD (0x11);					//XON прямая отправка
             if (modem_rdy)					//парсер вызывется только при активном модеме
             {
-                pars_res = parser();		//разбираем текст в msg
+                uint8_t pars_res = parser();		//разбираем текст в msg, результат работы парсера нужен только в DEBUG режиме
 #ifdef DEBUG
                 lcd_dat_XY(pars_res, 7, 1); //выводим признак результатата работы парсинга
 #endif
@@ -3264,7 +3264,7 @@ int main (void)
 
             if (gsm_lvl_req)							//если в прерывании установился флаг отправки запроса уровня
             {
-                cmd_to_queue (AT_CSQ, NULL, NULL, NULL, NULL, NULL);//ставим задачу
+                cmd_to_queue ((uint8_t *)AT_CSQ, NULL, NULL, NULL, NULL, NULL);//ставим задачу
                 gsm_lvl_req = 0;						//обнуляем флаг
                 time_gsm = 0;							//запускаем таймер запросов уровня gsm в прерывании
             }
