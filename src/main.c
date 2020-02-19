@@ -189,6 +189,8 @@ const uint16_t dev_last_n = (EEP_MEM - 2);									// константа, содержащая знач
 /*нужна для корректного продолжения автоматической нумерации в именах при добавлении в интерактивном режиме после удаления устройств через меню интерактивного удаления */
 const uint8_t n_max = (uint8_t)((EEP_MEM - 2) / sizeof(device));			// максимально допустимое количество усройств в епром
 uint8_t scratchpad [9];														// массив байтов, прочитанных из блокнота DS18B20
+int8_t *t_all = NULL;														// глобальный указатель на локальный (в main) массив целых частей последних измеренных температур со знаком (last_t[n_max])
+/* из-за вычислямости размера массива last_t[n_max] его не сделать глобальным сразу, можно только засунуть в функцию, а глобально обращаться через этот указатель */
 
 //блок переменных-счётчиков для индикации уровня gsm
 volatile uint8_t flash_cnt; 	// счётчик прерываний для индикации уровня gsm вспышками диода
@@ -233,9 +235,9 @@ typedef struct	//структура трекинга работы обработчиков
 
 typedef struct	//структура содержимого смс
 {
-    uint8_t sms_type;					// вариант шаблона смс
-    uint8_t dev_num;					// номер устройства
-    int8_t param;						// параметр, пока только температура из массива результатов измерений
+    uint8_t sms_type;					// вариант шаблона смс (обязательный параметр)
+    uint8_t dev_num;					// номер устройства (заполняется при необходимости)
+    int8_t param;						// параметр, пока только температура из массива результатов измерений (заполняется при необходимости)
 }sms_mask;
 
 typedef struct 	//структура задачи приёма смс, 4 байта
@@ -246,8 +248,8 @@ typedef struct 	//структура задачи приёма смс, 4 байта
 
 typedef struct //структура задачи отправки смс, 21 байт, снизить до 8 через передачу сюда № устройства, указателей (части строк смс) и массива символов (текущее значение параметра).
 {
-    tracker step;						// Флаги процесса
-    sms_mask sms_txt; 					// Массив для записи текста смс для отправки
+    tracker step;						// Флаги процесса отправки
+    sms_mask sms_txt; 					// структура для записи параметров исходящего смс, сборка текста налету при отправке по параметрам
 }out_task;
 
 typedef struct //структура задачи отправки команд в модем, 5 байт
@@ -1139,6 +1141,11 @@ uint8_t send_sms (void)	//HANDLER отправки смс
     uint8_t cmd[26];		// временный массив текста команды
     uint8_t name[N_NAME];	// временный массив имени устройства
     uint8_t k = 0;			// переменная номера устройства
+    uint8_t n = 0;			// переменная количества устройств
+    uint8_t sms_type = 0;	// переменная для типа смс
+    int8_t t = 0;			// переменная температуры из массива измерений
+    uint8_t digits[N_DIGS];	// временный массив цифр температур
+
     if (!WR_SMS[out_task_T].step.flag_1 && !WR_SMS[out_task_T].step.flag_2)	//если первый вход в задачу
     {
         strcpy_P ((char*)cmd, (PGM_P) AT_CMGS);
@@ -1156,15 +1163,30 @@ uint8_t send_sms (void)	//HANDLER отправки смс
     {
         if (mod_ans == INVITE)	//если в msg есть ">"
         {
-            uint8_t sms_type = WR_SMS[out_task_T].sms_txt.sms_type;
+            sms_type = WR_SMS[out_task_T].sms_txt.sms_type;
             switch (sms_type)
             {
                 case FAIL:
-                    k = WR_SMS[out_task_T].sms_txt.dev_num;				//копируем номер устройства
-                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);//читаем имя устройства во временный массив
+                    k = WR_SMS[out_task_T].sms_txt.dev_num;					// копируем номер устройства
+                    eeprom_read_block (name, &ee_arr[k].name, sizeof name);	// читаем имя устройства во временный массив
                     arr_to_TX_Ring (name);			// шлём в кольцо имя
                     string_to_TX_Ring (blank);		// шлём в кольцо пробел
                     string_to_TX_Ring (crash);		// шлём в кольцо АВАРИЯ!
+                    break;
+                case ALL:
+                    n = eeprom_read_byte((uint8_t*)dev_qty);
+                    for (k = 0; k < n; k++)
+                    {
+                        eeprom_read_block (name, &ee_arr[k].name, sizeof name);	// читаем имя устройства во временный массив
+                        arr_to_TX_Ring (name);									// шлём в кольцо имя
+                        string_to_TX_Ring (blank);								// шлём в кольцо пробел
+                        t = t_all[k];											// читаем температуру из массива измерений
+                        byte_to_TX_Ring(((t & 0b10000000) ? '-' : '+'));		// шлём в кольцо знак температуры
+                        arr_to_TX_Ring(utoa_fast_div (((t & 0b10000000) ? ((~t) + 1) : t), digits)); // шлём в кольцо цифры темп-ры
+                        string_to_TX_Ring (CRLF);								// шлём в кольцо символы CRLF
+                        UCSR0B |= (1<<UDRIE0);									// разрешение прерывания по опустошению UDR передатчика
+                        while (UCSR0B & (1<<UDRIE0)){;}							// ждём пока не сбросится флаг
+                    }
                     break;
                 case TEST1:
                     string_to_TX_Ring (quick);
@@ -1172,9 +1194,8 @@ uint8_t send_sms (void)	//HANDLER отправки смс
                 case TEST2:
                     string_to_TX_Ring (slow);
                 default:							// если ни один случай не отработал
-                    // string_to_TX_Ring (sms_send);	// пока шлём текст SMS АВАРИЯ!
-                    // string_to_TX_Ring (crash);
-                    // string_to_TX_Ring (CTRL_Z);		// обеспечить \0 в конце текста смс в .sms_txt!!!
+                    string_to_TX_Ring (sms_send);	// пока шлём текст SMS АВАРИЯ!
+                    string_to_TX_Ring (crash);
                     break;
             }
             string_to_TX_Ring (CTRL_Z);				// обеспечить \0 в конце текста смс в .sms_txt!!!
@@ -1455,6 +1476,11 @@ void to_do (void) //тестовый модуль разбора и выполнения команды
     {
         // out_to_queue ((uint8_t*)(PSTR("answer")));
         sms_buff.sms_type = TEST2;
+        out_to_queue (&sms_buff);
+    }
+    else if (todo_txt[0]=='T' && todo_txt[1]==' ' && todo_txt[2]=='A' && todo_txt[3]=='L' && todo_txt[4]=='L')
+    {
+        sms_buff.sms_type = ALL;
         out_to_queue (&sms_buff);
     }
     else
@@ -2011,6 +2037,7 @@ int main (void)
     uint8_t stage = 0;							// состояние автомата индикации
     uint8_t lines_n = 0;						// количество строк кадра, передаётся в функцию Display
     uint8_t menu_act = 0;						// флаг фхода в меню
+    t_all = last_t;								// определяем глобальный указатель на локальный массив
 
     cli();
     modem_rdy = 0;								//при старте по умолчанию модем не готов
@@ -2398,8 +2425,8 @@ int main (void)
                 {
                     msg_clr();
                     modem_rdy = 1;	//модем готов
-                    lcd_clr();
-                    _delay_us(50);
+                    // lcd_clr();
+                    // _delay_us(50);
                     // send_string_to_LCD_XY (not_rdy, 6, 0);
                     // send_string_to_LCD_XY (sim900, 2, 0);//смещаем чтобы убрать "не" из "не готов"
 #ifdef DEBUG
@@ -2440,18 +2467,18 @@ int main (void)
                 time_gsm = 0;				//запускаем таймер запросов уровня gsm в прерывании
             }
 
-            switch (press_time) // блок детектирования нажатия кнопки и задач по длительности жима
+            switch (press_time) 			// блок детектирования нажатия кнопки и задач по длительности жима
             {
                 case QUICK :
                 {
-                    sms_buff.sms_type = TEST1;
-                    out_to_queue (&sms_buff);	//отправляем текст QUICK
-                    lcd_clr(); 				//очистка дисплея
-                    send_string_to_LCD_XY(quick, 0, 0);
+                    sms_buff.sms_type = ALL;
+                    out_to_queue (&sms_buff);			//отправляем перечень температур в смс
+                    lcd_clr(); 							//очистка дисплея
+                    send_string_to_LCD_XY(quick, 0, 0); //отправляем текст QUICK на lcd
                     press_time = 0;
                     break;
                 }
-                case SLOW :
+                case SLOW : // сейчас не работает
                 {
                     //out_to_queue (slow);	//отправляем текст SLOW
                     lcd_clr();				// очистка дисплея
