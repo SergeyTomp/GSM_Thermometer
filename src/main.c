@@ -40,7 +40,7 @@ unsigned char no_answer[] PROGMEM = "Нет ответа датч. ";
 unsigned char temp_sign; // признак знака температуры для ф-ции вывода на ЖКИ
 
 
-typedef struct
+typedef struct //структура для параметров устройства
 {
     unsigned char name[8]; // имя 1W устройства
     unsigned char code[8]; // код 1W устройства
@@ -56,6 +56,16 @@ unsigned char dev_name[8] = {'D', 'x', 'x', 'x', 'x', 'x', 'x', 'x'}; //"D__" - 
 //unsigned char dev_qty EEMEM;
 const uint16_t dev_qty = 0x3FF;//константа, содержащая значение адреса последней ячейки в епром для переменной количества найденных устройств
 
+typedef struct // структура для строки дисплея
+{
+    uint8_t name[8]; //имя устройства
+    short unsigned int dig_1;//первая цифра температуры
+    short unsigned int dig_2;//вторая цифра температуры
+    short unsigned int dig_3;//десятичная цифра температуры
+    unsigned char sign; //знак температуры
+} line;
+line line_up; // верхняя строка
+line line_dn; // нижняя строка
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -148,10 +158,53 @@ void lcd_init(void)
     //lcd_com(0x80); // Будем выводить строку в 1-ю верхнюю левую позицию 1 строки экрана
 }
 
-// Функция выделяет цифры из трехзначного числа Number, и распределяет вывод целого или плавающего заначения
-void Display (unsigned int Number, uint8_t i)
+// функция выводит знаки на LCD, вызывается из Disp_prep
+void Display (uint8_t line_qty)
 {
+    if (!line_qty) //если строка только одна (верхняя) - чистим дисплей
+    {
+        lcd_com(0x01); // очистка дисплея
+        _delay_us(1500);// время выполнения очистки не менее 1.5ms
+    }
+    //выводим первую строку в любом случае
+    lcd_com(0x80); // выводим имя в 1-ю верхнюю левую позицию 1 строки экрана
+    send_arr_to_LCD (line_up.name); //выводим имя устройства
+    lcd_com(0x88); // выводим температуру в 8-ю (от 0) позицию 1 строки экрана
+    if (!line_up.sign)
+    {lcd_dat('+');}
+    else
+    {lcd_dat('-');}
 
+    lcd_dat(line_up.dig_1 + '0');
+    lcd_dat(line_up.dig_2 + '0');
+    lcd_dat('.');
+    lcd_dat(line_up.dig_3 + '0');
+
+    //выводим вторую строку, если она есть
+    if (line_qty)
+    {
+        lcd_com(0xC0); // выводим строку в 1-ю верхнюю левую позицию 2 строки экрана
+        send_arr_to_LCD (line_dn.name); //выводим имя устройства
+        lcd_com(0xC8); // выводим температуру в 8-ю (от 0) позицию 2 строки экрана
+        if (!line_up.sign)
+        {lcd_dat('+');}
+        else
+        {lcd_dat('-');}
+
+        lcd_dat(line_dn.dig_1 + '0');
+        lcd_dat(line_dn.dig_2 + '0');
+        lcd_dat('.');
+        lcd_dat(line_dn.dig_3 + '0');
+    }
+}
+
+// Функция выделяет цифры из трехзначного числа Number,
+// распределяет вывод целого и десятичного заначения по символам,
+// заполняет массив строк для индикации на LCD
+// вызывается из main
+void Disp_prep (uint16_t Number, uint8_t i, uint8_t n)
+{
+    short unsigned int j=0;
     short unsigned int Num1, Num2, Num3;
     Num1=Num2=0;
     while (Number >= 100)
@@ -165,25 +218,38 @@ void Display (unsigned int Number, uint8_t i)
         Num2++;
     }
     Num3 = Number;
-    i &= 0x01; //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя
-    if (!i) //если строка верхняя - чистим дисплей
+    //определяем строку LCD: i это № устр-в: 0,2,4... верхняя, 1,3,5... нижняя
+    if (!(i & 0x01))
     {
-        lcd_com(0x01); // очистка дисплея
-        _delay_us(1500);// время выполнения очистки не менее 1.5ms
+        while (j < 8)
+        {
+            line_up.name[j] = buffer.name[j];
+            j++;
+        }
+        line_up.dig_1 = Num1;
+        line_up.dig_2 = Num2;
+        line_up.dig_3 = Num3;
+        line_up.sign = temp_sign;
+        if (!(i & 0x01) && (i==(n-1))) //если строка верхняя, но последняя, сразу вывод на LCD
+        {
+            Display (0); // передаём в функцию вывода кол-во строк 0->1, 1->2
+        }
     }
-    lcd_com(0x80 + (i*0x40)); // выводим строку в 1-ю верхнюю левую позицию 1 или 2 строки экрана
-    send_arr_to_LCD (buffer.name); //выводим имя устройства
-    lcd_com(0x88 + (i*0x40)); // выводим температуру в 8-ю (от 0) позицию 1ю или 2ю строки экрана
-    if (!temp_sign)
-    {lcd_dat('+');}
     else
-    {lcd_dat('-');}
-    lcd_dat(Num1 + '0');
-    lcd_dat(Num2 + '0');
-    lcd_dat('.');
-    lcd_dat(Num3 + '0');
-
+    {
+        while (j < 8)
+        {
+            line_dn.name[j] = buffer.name[j];
+            j++;
+        }
+        line_dn.dig_1 = Num1;
+        line_dn.dig_2 = Num2;
+        line_dn.dig_3 = Num3;
+        line_up.sign = temp_sign;
+        Display (1);// передаём в функцию вывода кол-во строк 0->1, 1->2
+    }
 }
+
 
 // Функция инициализации датчиков
 unsigned char init_device(void)
@@ -575,7 +641,7 @@ int main(void)
                 ((((temp_float + temp_int)<<1) + (temp_float + temp_int)<<3)) - умножаем на 10 сдвигами
             */
 
-            Display ((((uint8_t)(temp_float*0.0625) + temp_int)*10), i); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ. строки дисп.
+            Disp_prep ((uint16_t)((temp_float*0.0625 + temp_int)*10), i, n); //Явно приводим к uint8_t, чтобы уйти от float; передаём № устр-ва для определ. строки дисп.
             if ((i & 0x01)||(i == (n-1))) //определяем строку вывода на дисплей: № устр-в 0,2,4... верхняя, 1,3,5... нижняя;
                 //если строка нижняя - ставим задержку перед сменой экрана.
                 //Если строка верхняя, но устройство последнее - тоже задержка
