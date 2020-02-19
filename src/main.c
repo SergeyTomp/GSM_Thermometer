@@ -57,7 +57,7 @@
 #define MYUBRR			103					// скорость usart 9600
 #define RX_RING_SIZE	128					// размер буфера берём 128, ответ модема с текстом вх.смс больше 64 байт, а нужно обеспечить размер равный степени 2
 #define RX_IND_MSK		(RX_RING_SIZE - 1)	// маска индексов кольцевого буфера приёмника для обнуления индекса при переходе  RX_Index через 0
-#define TX_RING_SIZE	64					// размер буфера берём 64, максимальная длина посылки в модем 36 байт, но нужно обеспечить размер равный степени 2
+#define TX_RING_SIZE	64					// размер буфера берём 64, максимальная длина посылки в модем 37 байт, но нужно обеспечить размер равный степени 2
 #define TX_IND_MSK		(TX_RING_SIZE - 1)	// маска индексов кольцевого буфера передатчика для обнуления индекса при переходе TX_Index через 0
 
 //блок define для работы с модемом
@@ -1533,23 +1533,23 @@ uint8_t parser(void) // разбор текста msg
     uint8_t pars_res = 'Z';	// результат работы парсера
     static uint8_t money[6];// массив для цифр баланса, static, чтобы можно было передать на него указатель
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 			// если в msg есть r/n/OKr/n:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_OK))!=NULL) 		// если в msg есть r/n/OKr/n:
     {
         mod_ans = OK;
         pars_res = 'O';
     }
-    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)		// если в msg есть r/n>:
+    else if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_ENT))!=NULL)	// если в msg есть r/n>:
     {
         mod_ans = INVITE;
         pars_res = 'I';
     }
 
-    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)			// если в msg есть r/n/+cmgr:
+    if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CMGR))!=NULL)		// если в msg есть r/n/+cmgr:
     {
-        if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)			// если телефон правильный
+        txt_ptr += 8;														// смещаем указатель за +CMGR:_
+        uint8_t q = 0;														// счётчик кавычек
+        if (strstr((const char*)txt_ptr, (char*)phones.phone_0)!=NULL)		// если телефон правильный
         {
-            txt_ptr += 8;													// смещаем указатель за +CMGR:_
-            uint8_t q = 0;													// счётчик кавычек
             while ((q != 8)&&(*txt_ptr != '\r'))// ищем последние закрывающие (восьмые) кавычки, за ними будет текст смс
             {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
                 if (*txt_ptr == '\"')										// если наткнулись на кавычки
@@ -1558,7 +1558,7 @@ uint8_t parser(void) // разбор текста msg
             }
             if (q == 8)														// только если насчитали 8 кавычек, иначе нафиг эту смс
             {
-                txt_ptr += 2;
+                txt_ptr += 2;												// ставим указатель на первый символ текста смс
                 for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
                 uint8_t j = 0;
                 while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
@@ -1570,22 +1570,31 @@ uint8_t parser(void) // разбор текста msg
             }
             pars_res = 'R';
         }
-            // если телефон админа (из массива) не найден в ответе модема, но в массиве телефон user_0 не записан, принимаем номер из смс за user_0, записываем в массив и на сим
+            // если телефон админа (из массива) не найден в ответе модема, но в массиве телефон admin не записан, принимаем номер из смс за admin, записываем в массив и на сим
         else if ((phones.phone_0[0] != '+')&&(phones.phone_0[1] != '7')&&(phones.phone_0[2] != '9'))//достаточно проверки первых трёх символов
         {
-            for (uint8_t i = 0; i < 12; i++)
-            {
-                phones.phone_0[i] = txt_ptr[23 + i];
+            while ((q != 3)&&(*txt_ptr != '\r'))// ищем третьи  кавычки, открывающие, за ними будет телефон "REC (UN)READ","+79...
+            {									// ищем либо до \r\n после текста, либо до принудительных \r\nОК\r\n в конце msg (при переполнении RX_Ring)
+                if (*txt_ptr == '\"')										// если наткнулись на кавычки
+                {q += 1;}												// растим счётчик
+                txt_ptr += 1;												// указатель двигаем в любом случае
             }
-            cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
-            sms_buff.sms_type = ADMIN;										// отправляем подтверждение отправителю
-            out_to_queue (&sms_buff);
+            if (q == 3)														// только если насчитали 3 кавычки, иначе нафиг эту смс
+            {
+                for (uint8_t i = 0; i < 12; i++)
+                {
+                    phones.phone_0[i] = txt_ptr[i];
+                }
+                cmd_to_queue (AT_CPBW, CELL_2, phones.phone_0, TEXT_145, USER_0, QUOTES);	//записываем этот телефон на сим
+                sms_buff.sms_type = ADMIN;										// отправляем подтверждение отправителю
+                out_to_queue (&sms_buff);
+            }
         }
     }
 
     if ((txt_ptr = strstr_P((const char*)msg, (PGM_P) ANS_CSQ))!= NULL) // если в строке есть r/n/+csq:_
     {
-        txt_ptr = txt_ptr + 8;							// ставим указатель на первую цифру
+        txt_ptr += 8;									// ставим указатель на первую цифру
         uint8_t tmp[3];									// временный массив приёма символов цифр уровня сигнала
         uint8_t j = 0;
         while (isdigit(*(txt_ptr + j)))					// переносим цифровые символы после r/n/+csq:_ в массив
@@ -2062,7 +2071,7 @@ void to_do (void)			// модуль разбора и выполнения команды
                 out_to_queue (&sms_buff);
             }
         }
-        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL );// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
+        cmd_to_queue (AT_CUSD, QUOTES, phones.balance, QUOTES, NULL, NULL);// в любом случае запрос баланса, в частности проверка правильности цифр от юзера
     }
 
     else if ((txt_ptr = strstr_P((const char*)todo_txt, (PGM_P) DELETE)) != NULL)	// если в todo_txt есть DELETE
