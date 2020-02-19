@@ -267,8 +267,9 @@ typedef struct //структура задачи отправки команд в модем, 5 байт
 {
     tracker step;						// Флаги процесса
     uint8_t* cmd;						// указатель на AT-команду
-    uint8_t* par;						// указатель на параметр AT-команды из флэш
-    uint8_t* txt;						// указатель на параметр AT-команды из озу
+    uint8_t* ram_par;					// указатель на параметр AT-команды из озу
+    uint8_t* pgm_par_1;					// указатель на параметр AT-команды из флэш
+    uint8_t* pgm_par_2;					// указатель на параметр AT-команды из флэш
 }cmd_task;
 
 struct tel_list							// структура массивов телефонов пользователей и USSD-запросов
@@ -309,18 +310,18 @@ uint8_t TX_ring[TX_RING_SIZE];	// массив для кольцевого буфера передатчика
 //блок функций и массивов для работы с очередями
 /*	алгоритм работы колец очереди и задач: сначала читаем/пишем, потом сдвигаем индекс
 	алгоритм отличается от алгоритма колец Rx и TX!!! */
-inc_task RD_SMS[INC_TASK_SIZE];				//кольцевой список задач чтения смс
-out_task WR_SMS[OUT_TASK_SIZE];				//кольцевой список задач отправки смс
-cmd_task WR_CMD[CMD_TASK_SIZE];				//кольцевой список задач отправки команд
-uint8_t (*HANDLERS[QUEUE_SIZE])(void);		//кольцевая очередь указателей на функции-обработчики заданий
-uint8_t read_sms (void);					//объявляем HANDLER чтения смс
-uint8_t send_sms (void);					//объявляем HANDLER отправки смс
-uint8_t parser(void);						//объявляем HANDLER разбора текста
-uint8_t send_cmd (void);					//объявляем HANDLER отправки команды в модем
-void inc_to_queue(uint8_t*);				//объявляем функцию постановки в очередь задачи чтения смс
-void out_to_queue(sms_mask*);				//объявляем функцию постановки в очередь задачи отправки смс
-void cmd_to_queue(uint8_t*, uint8_t*, uint8_t*);//объявляем функцию постановки в очередь задачи отправки команды в модем
-void to_do(void);							//объявляем функцию разбора и выполнения команд из текста смс
+inc_task RD_SMS[INC_TASK_SIZE];								//кольцевой список задач чтения смс
+out_task WR_SMS[OUT_TASK_SIZE];								//кольцевой список задач отправки смс
+cmd_task WR_CMD[CMD_TASK_SIZE];								//кольцевой список задач отправки команд
+uint8_t (*HANDLERS[QUEUE_SIZE])(void);						//кольцевая очередь указателей на функции-обработчики заданий
+uint8_t read_sms (void);									//объявляем HANDLER чтения смс
+uint8_t send_sms (void);									//объявляем HANDLER отправки смс
+uint8_t parser(void);										//объявляем HANDLER разбора текста
+uint8_t send_cmd (void);									//объявляем HANDLER отправки команды в модем
+void inc_to_queue(uint8_t*);								//объявляем функцию постановки в очередь задачи чтения смс
+void out_to_queue(sms_mask*);								//объявляем функцию постановки в очередь задачи отправки смс
+void cmd_to_queue(uint8_t*, uint8_t*, uint8_t*, uint8_t*);	//объявляем функцию постановки в очередь задачи отправки команды в модем
+void to_do(void);											//объявляем функцию разбора и выполнения команд из текста смс
 
 // Функция записи команды в ЖКИ
 void lcd_com(unsigned char p)
@@ -1133,16 +1134,36 @@ uint8_t send_cmd (void)	//HANDLER отправки команды
     if (!WR_CMD[cmd_task_T].step.flag_1)			//если флаги процесса нули
     {
         uint8_t cmd_txt[26];
-        strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);		//собираем текст команды
-        if (WR_CMD[cmd_task_T].txt != NULL)								//если параметр команды из озу не пустой
+        strcpy_P ((char*)cmd_txt, (PGM_P) WR_CMD[cmd_task_T].cmd);			//собираем текст команды
+        if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
         {
-            strcat ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].txt);		//добавляем текст команды
+            strcat ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].ram_par);		//добавляем текст команды из озу
         }
-        if (WR_CMD[cmd_task_T].par != NULL)								//если параметр команды из флэш не пустой
+        if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
         {
-            strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].par);	//добавляем текст команды
+            strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].pgm_par_1);//добавляем текст команды из флэш
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
+        {
+            strcat_P ((char*)cmd_txt, (char*)WR_CMD[cmd_task_T].pgm_par_2);//добавляем текст команды из флэш
         }
         strcat_P ((char*)cmd_txt, (PGM_P) CRLF);	//собираем текст команды и записываем в задачу
+
+        /* string_to_TX_Ring (WR_CMD[cmd_task_T].cmd));
+        if (WR_CMD[cmd_task_T].ram_par != NULL)								//если параметр команды из озу не пустой
+        {
+            arr_to_TX_Ring (WR_CMD[cmd_task_T].ram_par);					//добавляем текст команды из озу
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_1 != NULL)							//если параметр_1 команды из флэш не пустой
+        {
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_1);				//добавляем текст команды из флэш
+        }
+        if (WR_CMD[cmd_task_T].pgm_par_2 != NULL)							//если параметр_2 команды из флэш не пустой
+        {
+            string_to_TX_Ring (WR_CMD[cmd_task_T].pgm_par_2);				//добавляем текст команды из флэш
+        }
+        string_to_TX_Ring (CRLF); */
+
         arr_to_TX_Ring (cmd_txt);					//отправка текста команды в кольцо передатчика
         ans_lim = 180;								//установка времени ожидания ответа
         UCSR0B |= (1<<UDRIE0);						//разрешение прерывания по опустошению UDR передатчика
@@ -1187,6 +1208,10 @@ uint8_t send_sms (void)	//HANDLER отправки смс
         strcat_P ((char*)cmd, (PGM_P) QUOTES);
         strcat_P ((char*)cmd, (PGM_P) CRLF);
         arr_to_TX_Ring (cmd);
+        /* string_to_TX_Ring (AT_CMGS);
+        arr_to_TX_Ring (phones.phone_0);
+        string_to_TX_Ring (QUOTES);
+        string_to_TX_Ring (CRLF); */
         ans_lim = 180;									// таймер ожидания ответа 3с
         UCSR0B |= (1<<UDRIE0);							// разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;									// запускаем таймер ожидания ответа ">"
@@ -1389,6 +1414,9 @@ uint8_t read_sms (void)	//HANDLER чтения смс
         strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
         strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
         arr_to_TX_Ring (cmd);
+        /* string_to_TX_Ring (AT_CMGR);
+        arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
+        string_to_TX_Ring (CRLF); */
         ans_lim = 120;						//таймер ответа 2с
         UCSR0B |= (1<<UDRIE0);				//разрешение прерывания по опустошению UDR передатчика
         ans_cnt = 0;						//запускаем таймер ожидания ответа "/r/nOK/r/n"
@@ -1403,6 +1431,9 @@ uint8_t read_sms (void)	//HANDLER чтения смс
             strcat ((char*)cmd, (char*)RD_SMS[inc_task_T].sms_num);	//собираем команду из флэш
             strcat_P ((char*)cmd, (PGM_P) CRLF);					//собираем команду из флэш
             arr_to_TX_Ring (cmd);
+            /* string_to_TX_Ring (AT_CMGD);
+            arr_to_TX_Ring (RD_SMS[inc_task_T].sms_num);
+            string_to_TX_Ring (CRLF); */
             ans_lim = 120;							//таймер ожидания ответа 2с
             UCSR0B |= (1<<UDRIE0);					//разрешение прерывания по опустошению UDR передатчика
             ans_cnt = 0;							//запускаем таймер ответа
@@ -1471,6 +1502,22 @@ uint8_t parser(void) // разбор текста msg
     {
         if (strstr((const char*)msg, (char*)phones.phone_0)!=NULL)				// если телефон правильный
         {
+            /* uint8_t q = 0;														// счётчик кавычек
+            while ((q < 7)&&(*txt_ptr != '\r'))									// ищем шестые кавычки, за ними будет текст смс, но не выходим за предел '\r'
+            {
+                if (*txt_ptr == '\"') {q += 1;}
+                txt_ptr += 1;
+                if (q == 6)														// только если насчитали 6 кавычек, иначе нафиг эту смс
+                {
+                    for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}	// очистка массива задания контроллеру
+                    uint8_t j = 0;
+                    while (((*txt_ptr) != '\r') && (j < TODO_MAX))				// копируем текст команды контроллеру из смс
+                    {
+                        todo_txt[j] = *(txt_ptr + j);
+                        j++;
+                    }
+                }
+            } */
             for (uint8_t j = 0; j < TODO_MAX; j++) {todo_txt [j] = 0;}		 	// очистка массива задания контроллеру
             uint8_t j = 0;
             while (((*(txt_ptr + 64 + j)) != '\r') && (j < TODO_MAX))			// копируем текст команды контроллеру из смс
@@ -1601,13 +1648,14 @@ void out_to_queue (sms_mask *str)	//постановка в очередь задачи отправки смс
     }
 }
 
-void cmd_to_queue (uint8_t *cmd, uint8_t *par, uint8_t *txt)	//постановка в очередь задачи отправки команды
+void cmd_to_queue (uint8_t *cmd, uint8_t *ram_par, uint8_t *pgm_par_1, uint8_t *pgm_par_2)	//постановка в очередь задачи отправки команды
 {
     if ((((queue_H + 1) & QUEUE_IND_MSK) != queue_T) && (((cmd_task_H + 1) & CMD_TASK_IND_MSK) != cmd_task_T)) 	//если голова не догнала хвост
     {
-        WR_CMD[cmd_task_H].cmd = cmd;		//записываем указатель на текст команды в задачу
-        WR_CMD[cmd_task_H].par = par;		//записываем указатель на параметр команды в задачу
-        WR_CMD[cmd_task_H].txt = txt;		//записываем указатель на параметр команды в задачу
+        WR_CMD[cmd_task_H].cmd = cmd;									//записываем указатель на текст команды в задачу
+        WR_CMD[cmd_task_H].ram_par = ram_par;							//записываем указатель на озу-параметр команды в задачу
+        WR_CMD[cmd_task_H].pgm_par_1 = pgm_par_1;						//записываем указатель1 на флэш-параметр команды в задачу
+        WR_CMD[cmd_task_H].pgm_par_2 = pgm_par_2;						//записываем указатель2 на флэш-параметр команды в задачу
         //обнуляем флаги процесса
         WR_CMD[cmd_task_H].step.flag_1 = WR_CMD[cmd_task_H].step.flag_2 = WR_CMD[cmd_task_H].step.flag_3 = WR_CMD[cmd_task_H].step.flag_4
                 = WR_CMD[cmd_task_H].step.flag_5 = WR_CMD[cmd_task_H].step.flag_6 = WR_CMD[cmd_task_H].step.flag_7 = WR_CMD[cmd_task_H].step.flag_8 = 0;
@@ -1814,7 +1862,7 @@ void to_do (void)			// модуль разбора и выполнения команды
     }
     else if (strstr_P((const char*)todo_txt, (PGM_P) BALANCE) != NULL)//если в todo_txt есть BALANCE
     {
-        cmd_to_queue (AT_CUSD, NULL, phones.balance);
+        cmd_to_queue (AT_CUSD, phones.balance, NULL, NULL);
     }
     else
     {
@@ -2404,7 +2452,8 @@ int main (void)
     TX_IndexIN = TX_IndexOUT = RX_IndexIN = RX_IndexOUT = 0;// Сбросить к/буферы приёмника и передатчика
     msg_clr();									//очистка msg
     ans_cnt = 0;								// запуск таймера ожидания ответа модема после включения/сброса
-    cmd_to_queue (AT_CMGD, TEXT_1_4, NULL);		// добавляем в список команд "удалить все смс"
+    //cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);		// добавляем в стартовый список команд "удалить все смс"
+    cmd_to_queue (AT_CMGD, NULL, TEXT_1_4, NULL);
     sei();										// глобально разрешаем прерывания
 
 
@@ -2799,14 +2848,14 @@ int main (void)
 #endif
             }
 
-            if (gsm_lvl_req)						//если в прерывании установился флаг отправки запроса уровня
+            if (gsm_lvl_req)							//если в прерывании установился флаг отправки запроса уровня
             {
-                cmd_to_queue (AT_CSQ, NULL, NULL);	//ставим задачу
-                gsm_lvl_req = 0;					//обнуляем флаг
-                time_gsm = 0;						//запускаем таймер запросов уровня gsm в прерывании
+                cmd_to_queue (AT_CSQ, NULL, NULL, NULL);//ставим задачу
+                gsm_lvl_req = 0;						//обнуляем флаг
+                time_gsm = 0;							//запускаем таймер запросов уровня gsm в прерывании
             }
 
-            switch (press_time) 					// блок детектирования нажатия кнопки и задач по длительности жима
+            switch (press_time) 						// блок детектирования нажатия кнопки и задач по длительности жима
             {
                 case QUICK :
                 {
